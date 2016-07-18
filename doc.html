@@ -1,0 +1,1450 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Documentation &mdash; Beta NMF with mini-batch updates 1.0 documentation</title>
+    
+    <link rel="stylesheet" href="_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="Beta NMF with mini-batch updates 1.0 documentation" href="index.html" />
+    <link rel="prev" title="Group-NMF with \(\beta\) -divergence" href="intro.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="intro.html" title="Group-NMF with \(\beta\) -divergence"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">Beta NMF with mini-batch updates 1.0 documentation</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="module-beta_nmf_minibatch">
+<span id="documentation"></span><h1>Documentation<a class="headerlink" href="#module-beta_nmf_minibatch" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="beta-nmf-minibatch-py">
+<h2>beta_nmf_minibatch.py<a class="headerlink" href="#beta-nmf-minibatch-py" title="Permalink to this headline">¶</a></h2>
+<div class="topic">
+<p class="topic-title first">Contents</p>
+<p>The beta_nmf_minibatch module includes the betaNMF class,
+fit function and theano functions to compute updates and cost.</p>
+</div>
+<dl class="class">
+<dt id="beta_nmf_minibatch.BetaNMF">
+<em class="property">class </em><code class="descclassname">beta_nmf_minibatch.</code><code class="descname">BetaNMF</code><span class="sig-paren">(</span><em>data_shape</em>, <em>n_components=50</em>, <em>beta=0</em>, <em>n_iter=50</em>, <em>fixed_factors=None</em>, <em>cache1_size=0</em>, <em>batch_size=100</em>, <em>verbose=0</em>, <em>init='random'</em>, <em>W=None</em>, <em>H=None</em>, <em>solver='mu_batch'</em>, <em>nb_batch_w=1</em>, <em>sag_memory=0</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/beta_nmf_minibatch.html#BetaNMF"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#beta_nmf_minibatch.BetaNMF" title="Permalink to this definition">¶</a></dt>
+<dd><p>BetaNMF class</p>
+<p>Performs nonnegative matrix factorization with mini-batch multiplicative
+updates. GPGPU implementation based on Theano.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><p class="first"><strong>data_shape</strong> : tuple composed of integers</p>
+<blockquote>
+<div><p>The shape of the data to approximate</p>
+</div></blockquote>
+<p><strong>n_components</strong> : positive integer</p>
+<blockquote>
+<div><p>The number of latent components for the NMF model</p>
+</div></blockquote>
+<p><strong>beta: arbitrary float.</strong></p>
+<blockquote>
+<div><dl class="docutils">
+<dt>The beta-divergence to consider. Particular cases of interest are</dt>
+<dd><ul class="first last simple">
+<li>beta=2 : Euclidean distance</li>
+<li>beta=1 : Kullback Leibler</li>
+<li>beta=0 : Itakura-Saito</li>
+</ul>
+</dd>
+</dl>
+</div></blockquote>
+<p><strong>n_iter: positive integer</strong></p>
+<blockquote>
+<div><p>number of iterations</p>
+</div></blockquote>
+<p><strong>fixed_factors: array of intergers</strong></p>
+<blockquote>
+<div><p>Indexes of the factors that are kept fixed during the updates
+* [0] : corresponds to fixed H
+* [1] : corresponds to fixed W</p>
+</div></blockquote>
+<p><strong>cache1_size: integer</strong></p>
+<blockquote>
+<div><p>Size (in frames) of the first data cache.
+The size is reduced to the closest multiple of the batch_size.
+If set to zero the algorithm tries to fit all the data in cache</p>
+</div></blockquote>
+<p><strong>batch_size: integer</strong></p>
+<blockquote>
+<div><p>Size (in frames) of the batch for batch processing.
+The batch size has an impact on the parrelization and the memory needed
+to store partial gradients (see Schmidt et al.)</p>
+</div></blockquote>
+<p><strong>verbose: integer</strong></p>
+<blockquote>
+<div><p>The numer of iterations to wait between two computation and printing
+of the cost</p>
+</div></blockquote>
+<p><strong>init</strong> : string (default &#8216;random&#8217;)</p>
+<blockquote>
+<div><ul class="simple">
+<li>random : initalise the factors randomly</li>
+<li>custom : intialise the factors with custom value</li>
+</ul>
+</div></blockquote>
+<p><strong>W</strong> : array (optionnal)</p>
+<blockquote>
+<div><p>Initial wvalue for factor W when custom initialisation is used</p>
+</div></blockquote>
+<p><strong>H</strong> : array (optionnal)</p>
+<blockquote>
+<div><p>Initial wvalue for factor H when custom initialisation is used</p>
+</div></blockquote>
+<p><strong>solver</strong> : string (default &#8216;mu_batch&#8217;)</p>
+<blockquote>
+<div><ul class="simple">
+<li>mu_batch : mini-batch version of the MU updates.</li>
+</ul>
+<blockquote>
+<div><p>(fully equivalent to standard NMF with MU).</p>
+</div></blockquote>
+<ul class="simple">
+<li>asg_mu : Asymetric stochatistic gradient for MU <a class="footnote-reference" href="#id8" id="id1">[1]</a></li>
+<li>gsg_mu : Greedy stochatistic gradient for  MU <a class="footnote-reference" href="#id8" id="id2">[1]</a></li>
+<li>asag_mu : Asymetric stochatistic average gradient <a class="footnote-reference" href="#id9" id="id3">[2]</a> for MU <a class="footnote-reference" href="#id8" id="id4">[1]</a></li>
+<li>gsag_mu : Greedy stochatistic average gradient <a class="footnote-reference" href="#id9" id="id5">[2]</a> for MU <a class="footnote-reference" href="#id8" id="id6">[1]</a></li>
+</ul>
+</div></blockquote>
+<p><strong>nb_batch_w</strong> : interger (default 1)</p>
+<blockquote>
+<div><p>number of batches on which W updates is computed
+* 1 : greedy approaches <a class="footnote-reference" href="#id8" id="id7">[1]</a></p>
+</div></blockquote>
+<p><strong>sag_memory</strong> : integer (default 0)</p>
+<blockquote class="last">
+<div><p>number of batches used to compute the average gradient
+* 0 : SG approaches
+* nb_batches : SAG approaches</p>
+</div></blockquote>
+</td>
+</tr>
+</tbody>
+</table>
+<p class="rubric">References</p>
+<table class="docutils footnote" frame="void" id="id8" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label">[1]</td><td>R. Serizel, S. Essid, and G. Richard. “Mini-batch stochastic
+approaches for accelerated multiplicative updates in nonnegative matrix
+factorisation with beta-divergence”. Accepted for publication
+In <em>Proc. of MLSP</em>, p. 5, 2016.</td></tr>
+</tbody>
+</table>
+<table class="docutils footnote" frame="void" id="id9" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label">[2]</td><td>Schmidt, M., Roux, N. L., &amp; Bach, F. (2013).
+Minimizing finite sums with the stochastic average gradient
+<a class="reference external" href="https://hal.inria.fr/hal-00860051/PDF/sag_journal.pdf">https://hal.inria.fr/hal-00860051/PDF/sag_journal.pdf</a></td></tr>
+</tbody>
+</table>
+<p class="rubric">Attributes</p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="17%" />
+<col width="83%" />
+</colgroup>
+<tbody valign="top">
+<tr class="row-odd"><td>nb_cache1</td>
+<td>(integer) number of caches needed to fill the full data</td>
+</tr>
+<tr class="row-even"><td>forget_factor</td>
+<td>(float) forgetting factor for SAG</td>
+</tr>
+<tr class="row-odd"><td>scores</td>
+<td>(array) reconstruction cost and iteration time for each iteration</td>
+</tr>
+<tr class="row-even"><td>factors_</td>
+<td>(list of arrays) The estimated factors</td>
+</tr>
+<tr class="row-odd"><td>w</td>
+<td>(theano tensor) factor W</td>
+</tr>
+<tr class="row-even"><td>h_cache1</td>
+<td>(theano tensor) part of the factor H in cache1</td>
+</tr>
+<tr class="row-odd"><td>x_cache1</td>
+<td>(theano tensor) data cache</td>
+</tr>
+</tbody>
+</table>
+<p class="rubric">Methods</p>
+<table border="1" class="longtable docutils">
+<colgroup>
+<col width="10%" />
+<col width="90%" />
+</colgroup>
+<tbody valign="top">
+<tr class="row-odd"><td><a class="reference internal" href="#beta_nmf_minibatch.BetaNMF.fit" title="beta_nmf_minibatch.BetaNMF.fit"><code class="xref py py-obj docutils literal"><span class="pre">fit</span></code></a>(data[,&nbsp;full_sag,&nbsp;cyclic])</td>
+<td>Learns NMF model</td>
+</tr>
+<tr class="row-even"><td><a class="reference internal" href="#beta_nmf_minibatch.BetaNMF.get_div_function" title="beta_nmf_minibatch.BetaNMF.get_div_function"><code class="xref py py-obj docutils literal"><span class="pre">get_div_function</span></code></a>()</td>
+<td>compile the theano-based divergence function</td>
+</tr>
+<tr class="row-odd"><td><a class="reference internal" href="#beta_nmf_minibatch.BetaNMF.get_gradient_mu_batch" title="beta_nmf_minibatch.BetaNMF.get_gradient_mu_batch"><code class="xref py py-obj docutils literal"><span class="pre">get_gradient_mu_batch</span></code></a>()</td>
+<td>compile the theano based gradient functions for mu</td>
+</tr>
+<tr class="row-even"><td><a class="reference internal" href="#beta_nmf_minibatch.BetaNMF.get_gradient_mu_sag" title="beta_nmf_minibatch.BetaNMF.get_gradient_mu_sag"><code class="xref py py-obj docutils literal"><span class="pre">get_gradient_mu_sag</span></code></a>()</td>
+<td>compile the theano based gradient functions for mu_sag algorithms</td>
+</tr>
+<tr class="row-odd"><td><a class="reference internal" href="#beta_nmf_minibatch.BetaNMF.get_gradient_mu_sg" title="beta_nmf_minibatch.BetaNMF.get_gradient_mu_sg"><code class="xref py py-obj docutils literal"><span class="pre">get_gradient_mu_sg</span></code></a>()</td>
+<td>compile the theano based gradient functions for mu_sg algorithms</td>
+</tr>
+<tr class="row-even"><td><a class="reference internal" href="#beta_nmf_minibatch.BetaNMF.get_updates" title="beta_nmf_minibatch.BetaNMF.get_updates"><code class="xref py py-obj docutils literal"><span class="pre">get_updates</span></code></a>()</td>
+<td>compile the theano based update functions</td>
+</tr>
+<tr class="row-odd"><td><a class="reference internal" href="#beta_nmf_minibatch.BetaNMF.init" title="beta_nmf_minibatch.BetaNMF.init"><code class="xref py py-obj docutils literal"><span class="pre">init</span></code></a>()</td>
+<td>Initialise theano variable to store the gradients</td>
+</tr>
+<tr class="row-even"><td><a class="reference internal" href="#beta_nmf_minibatch.BetaNMF.prepare_batch" title="beta_nmf_minibatch.BetaNMF.prepare_batch"><code class="xref py py-obj docutils literal"><span class="pre">prepare_batch</span></code></a>([randomize])</td>
+<td>Arrange data for batches</td>
+</tr>
+<tr class="row-odd"><td><a class="reference internal" href="#beta_nmf_minibatch.BetaNMF.prepare_cache1" title="beta_nmf_minibatch.BetaNMF.prepare_cache1"><code class="xref py py-obj docutils literal"><span class="pre">prepare_cache1</span></code></a>([randomize])</td>
+<td>Arrange data for to fill cache1</td>
+</tr>
+<tr class="row-even"><td><a class="reference internal" href="#beta_nmf_minibatch.BetaNMF.set_params" title="beta_nmf_minibatch.BetaNMF.set_params"><code class="xref py py-obj docutils literal"><span class="pre">set_params</span></code></a>([W,&nbsp;H])</td>
+<td>Re-set theano based parameters according to the object attributes.</td>
+</tr>
+<tr class="row-odd"><td><a class="reference internal" href="#beta_nmf_minibatch.BetaNMF.update_mu_batch_h" title="beta_nmf_minibatch.BetaNMF.update_mu_batch_h"><code class="xref py py-obj docutils literal"><span class="pre">update_mu_batch_h</span></code></a>(batch_ind,&nbsp;update_func,&nbsp;...)</td>
+<td>Update h for current batch with standard MU</td>
+</tr>
+<tr class="row-even"><td><a class="reference internal" href="#beta_nmf_minibatch.BetaNMF.update_mu_batch_w" title="beta_nmf_minibatch.BetaNMF.update_mu_batch_w"><code class="xref py py-obj docutils literal"><span class="pre">update_mu_batch_w</span></code></a>(udpate_func)</td>
+<td>Update W with standard MU</td>
+</tr>
+<tr class="row-odd"><td><a class="reference internal" href="#beta_nmf_minibatch.BetaNMF.update_mu_sag" title="beta_nmf_minibatch.BetaNMF.update_mu_sag"><code class="xref py py-obj docutils literal"><span class="pre">update_mu_sag</span></code></a>(batch_ind,&nbsp;update_func,&nbsp;grad_func)</td>
+<td>Update current batch with SAG based algorithms</td>
+</tr>
+</tbody>
+</table>
+<dl class="method">
+<dt id="beta_nmf_minibatch.BetaNMF.fit">
+<code class="descname">fit</code><span class="sig-paren">(</span><em>data</em>, <em>full_sag=True</em>, <em>cyclic=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/beta_nmf_minibatch.html#BetaNMF.fit"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#beta_nmf_minibatch.BetaNMF.fit" title="Permalink to this definition">¶</a></dt>
+<dd><p>Learns NMF model</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><p class="first"><strong>data</strong> : ndarray with nonnegative entries</p>
+<blockquote class="last">
+<div><p>The input array</p>
+</div></blockquote>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="beta_nmf_minibatch.BetaNMF.get_div_function">
+<code class="descname">get_div_function</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/beta_nmf_minibatch.html#BetaNMF.get_div_function"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#beta_nmf_minibatch.BetaNMF.get_div_function" title="Permalink to this definition">¶</a></dt>
+<dd><p>compile the theano-based divergence function</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="beta_nmf_minibatch.BetaNMF.get_gradient_mu_batch">
+<code class="descname">get_gradient_mu_batch</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/beta_nmf_minibatch.html#BetaNMF.get_gradient_mu_batch"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#beta_nmf_minibatch.BetaNMF.get_gradient_mu_batch" title="Permalink to this definition">¶</a></dt>
+<dd><p>compile the theano based gradient functions for mu</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="beta_nmf_minibatch.BetaNMF.get_gradient_mu_sag">
+<code class="descname">get_gradient_mu_sag</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/beta_nmf_minibatch.html#BetaNMF.get_gradient_mu_sag"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#beta_nmf_minibatch.BetaNMF.get_gradient_mu_sag" title="Permalink to this definition">¶</a></dt>
+<dd><p>compile the theano based gradient functions for mu_sag algorithms</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="beta_nmf_minibatch.BetaNMF.get_gradient_mu_sg">
+<code class="descname">get_gradient_mu_sg</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/beta_nmf_minibatch.html#BetaNMF.get_gradient_mu_sg"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#beta_nmf_minibatch.BetaNMF.get_gradient_mu_sg" title="Permalink to this definition">¶</a></dt>
+<dd><p>compile the theano based gradient functions for mu_sg algorithms</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="beta_nmf_minibatch.BetaNMF.get_updates">
+<code class="descname">get_updates</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/beta_nmf_minibatch.html#BetaNMF.get_updates"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#beta_nmf_minibatch.BetaNMF.get_updates" title="Permalink to this definition">¶</a></dt>
+<dd><p>compile the theano based update functions</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="beta_nmf_minibatch.BetaNMF.init">
+<code class="descname">init</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/beta_nmf_minibatch.html#BetaNMF.init"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#beta_nmf_minibatch.BetaNMF.init" title="Permalink to this definition">¶</a></dt>
+<dd><p>Initialise theano variable to store the gradients</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="beta_nmf_minibatch.BetaNMF.prepare_batch">
+<code class="descname">prepare_batch</code><span class="sig-paren">(</span><em>randomize=True</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/beta_nmf_minibatch.html#BetaNMF.prepare_batch"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#beta_nmf_minibatch.BetaNMF.prepare_batch" title="Permalink to this definition">¶</a></dt>
+<dd><p>Arrange data for batches</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><p class="first"><strong>randomize</strong> : boolean (default True)</p>
+<blockquote class="last">
+<div><p>Randomise the data (time-wise) before preparing batch indexes</p>
+</div></blockquote>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="beta_nmf_minibatch.BetaNMF.prepare_cache1">
+<code class="descname">prepare_cache1</code><span class="sig-paren">(</span><em>randomize=True</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/beta_nmf_minibatch.html#BetaNMF.prepare_cache1"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#beta_nmf_minibatch.BetaNMF.prepare_cache1" title="Permalink to this definition">¶</a></dt>
+<dd><p>Arrange data for to fill cache1</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><p class="first"><strong>randomize</strong> : boolean (default True)</p>
+<blockquote class="last">
+<div><p>Randomise the data (time-wise) before preparing cahce indexes</p>
+</div></blockquote>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="beta_nmf_minibatch.BetaNMF.set_params">
+<code class="descname">set_params</code><span class="sig-paren">(</span><em>W=None</em>, <em>H=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/beta_nmf_minibatch.html#BetaNMF.set_params"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#beta_nmf_minibatch.BetaNMF.set_params" title="Permalink to this definition">¶</a></dt>
+<dd><p>Re-set theano based parameters according to the object attributes.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><p class="first"><strong>W</strong> : array (optionnal)</p>
+<blockquote>
+<div><p>Value for factor W when custom initialisation is used</p>
+</div></blockquote>
+<p><strong>H</strong> : array (optionnal)</p>
+<blockquote class="last">
+<div><p>Value for factor H when custom initialisation is used</p>
+</div></blockquote>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="beta_nmf_minibatch.BetaNMF.update_mu_batch_h">
+<code class="descname">update_mu_batch_h</code><span class="sig-paren">(</span><em>batch_ind</em>, <em>update_func</em>, <em>grad_func</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/beta_nmf_minibatch.html#BetaNMF.update_mu_batch_h"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#beta_nmf_minibatch.BetaNMF.update_mu_batch_h" title="Permalink to this definition">¶</a></dt>
+<dd><p>Update h for current batch with standard MU</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><p class="first"><strong>batch_ind</strong> : array with 2 elements</p>
+<blockquote>
+<div><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">batch_ind[0]:</th><td class="field-body">batch start</td>
+</tr>
+<tr class="field-even field"><th class="field-name">batch_ind[1]:</th><td class="field-body">batch end</td>
+</tr>
+</tbody>
+</table>
+</div></blockquote>
+<p><strong>update_func</strong> : Theano compiled function</p>
+<blockquote>
+<div><p>Update function</p>
+</div></blockquote>
+<p><strong>grad_func</strong> : Theano compiled function</p>
+<blockquote class="last">
+<div><p>Gradient function</p>
+</div></blockquote>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="beta_nmf_minibatch.BetaNMF.update_mu_batch_w">
+<code class="descname">update_mu_batch_w</code><span class="sig-paren">(</span><em>udpate_func</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/beta_nmf_minibatch.html#BetaNMF.update_mu_batch_w"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#beta_nmf_minibatch.BetaNMF.update_mu_batch_w" title="Permalink to this definition">¶</a></dt>
+<dd><p>Update W with standard MU</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><p class="first"><strong>update_func</strong> : Theano compiled function</p>
+<blockquote class="last">
+<div><p>Update function</p>
+</div></blockquote>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="beta_nmf_minibatch.BetaNMF.update_mu_sag">
+<code class="descname">update_mu_sag</code><span class="sig-paren">(</span><em>batch_ind</em>, <em>update_func</em>, <em>grad_func</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/beta_nmf_minibatch.html#BetaNMF.update_mu_sag"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#beta_nmf_minibatch.BetaNMF.update_mu_sag" title="Permalink to this definition">¶</a></dt>
+<dd><p>Update current batch with SAG based algorithms</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><p class="first"><strong>batch_ind</strong> : array with 2 elements</p>
+<blockquote>
+<div><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">batch_ind[0]:</th><td class="field-body">batch start</td>
+</tr>
+<tr class="field-even field"><th class="field-name">batch_ind[1]:</th><td class="field-body">batch end</td>
+</tr>
+</tbody>
+</table>
+</div></blockquote>
+<p><strong>update_func</strong> : Theano compiled function</p>
+<blockquote>
+<div><p>Update function</p>
+</div></blockquote>
+<p><strong>grad_func</strong> : Theano compiled function</p>
+<blockquote class="last">
+<div><p>Gradient function</p>
+</div></blockquote>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<span class="target" id="module-base"></span><div class="section" id="base-py">
+<h2>base.py<a class="headerlink" href="#base-py" title="Permalink to this headline">¶</a></h2>
+<div class="topic">
+<p class="topic-title first">Contents</p>
+<p>The base module includes the basic functions such as
+to load data, annotations, to normalize matrices
+and generate nonnegative random matrices</p>
+</div>
+<dl class="function">
+<dt id="base.get_norm_col">
+<code class="descclassname">base.</code><code class="descname">get_norm_col</code><span class="sig-paren">(</span><em>w</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/base.html#get_norm_col"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#base.get_norm_col" title="Permalink to this definition">¶</a></dt>
+<dd><p>returns the norm of a column vector</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><p class="first"><strong>w: 1-dimensionnal array</strong></p>
+<blockquote>
+<div><p>vector to be normalised</p>
+</div></blockquote>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">norm: scalar</p>
+<blockquote class="last">
+<div><p>norm-2 of w</p>
+</div></blockquote>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="base.load_all_data">
+<code class="descclassname">base.</code><code class="descname">load_all_data</code><span class="sig-paren">(</span><em>f_name</em>, <em>scale=True</em>, <em>rnd=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/base.html#load_all_data"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#base.load_all_data" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get data from from all sets stored H5FS file.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><p class="first"><strong>f_name</strong> : String</p>
+<blockquote>
+<div><p>file name</p>
+</div></blockquote>
+<p><strong>scale</strong> : Boolean (default True)</p>
+<blockquote>
+<div><p>scale data to unit variance (scikit-learn function)</p>
+</div></blockquote>
+<p><strong>rnd</strong> : Boolean (default True)</p>
+<blockquote>
+<div><p>randomize the data along time axis</p>
+</div></blockquote>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first"><strong>data_dic</strong> : Dictionnary</p>
+<blockquote class="last">
+<div><p>dictionary containing the data</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">x_train:</th><td class="field-body"><p class="first">numpy array</p>
+<p>train data matrix</p>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">x_test:</th><td class="field-body"><p class="first">numpy array</p>
+<p>test data matrix</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">x_dev:</th><td class="field-body"><p class="first">numpy array</p>
+<p class="last">dev data matrix</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div></blockquote>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="base.load_all_data_labels">
+<code class="descclassname">base.</code><code class="descname">load_all_data_labels</code><span class="sig-paren">(</span><em>f_name</em>, <em>scale=True</em>, <em>rnd=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/base.html#load_all_data_labels"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#base.load_all_data_labels" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get data with labels, for all sets.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><p class="first"><strong>f_name</strong> : String</p>
+<blockquote>
+<div><p>file name</p>
+</div></blockquote>
+<p><strong>scale</strong> : Boolean (default True)</p>
+<blockquote>
+<div><p>scale data to unit variance (scikit-learn function)</p>
+</div></blockquote>
+<p><strong>rnd</strong> : Boolean (default True)</p>
+<blockquote>
+<div><p>randomize the data along time axis</p>
+</div></blockquote>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first"><strong>data_dic</strong> : Dictionnary</p>
+<blockquote class="last">
+<div><p>dictionary containing the data</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">x_train:</th><td class="field-body"><p class="first">numpy array</p>
+<p>train data matrix</p>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">x_test:</th><td class="field-body"><p class="first">numpy array</p>
+<p>test data matrix</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">x_dev:</th><td class="field-body"><p class="first">numpy array</p>
+<p>dev data matrix</p>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">y_train:</th><td class="field-body"><p class="first">numpy array</p>
+<p>train labels vector</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">y_test:</th><td class="field-body"><p class="first">numpy array</p>
+<p>test labels vector</p>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">y_dev:</th><td class="field-body"><p class="first">numpy array</p>
+<p class="last">dev labels vector</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div></blockquote>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="base.load_all_data_labels_fids">
+<code class="descclassname">base.</code><code class="descname">load_all_data_labels_fids</code><span class="sig-paren">(</span><em>f_name</em>, <em>scale=True</em>, <em>rnd=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/base.html#load_all_data_labels_fids"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#base.load_all_data_labels_fids" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get data with labels and file ids for all sets.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><p class="first"><strong>f_name</strong> : String</p>
+<blockquote>
+<div><p>file name</p>
+</div></blockquote>
+<p><strong>scale</strong> : Boolean (default True)</p>
+<blockquote>
+<div><p>scale data to unit variance (scikit-learn function)</p>
+</div></blockquote>
+<p><strong>rnd</strong> : Boolean (default True)</p>
+<blockquote>
+<div><p>randomize the data along time axis</p>
+</div></blockquote>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first"><strong>data_dic</strong> : Dictionnary</p>
+<blockquote class="last">
+<div><p>dictionary containing the data</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">x_train:</th><td class="field-body"><p class="first">numpy array</p>
+<p>train data matrix</p>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">x_test:</th><td class="field-body"><p class="first">numpy array</p>
+<p>test data matrix</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">x_dev:</th><td class="field-body"><p class="first">numpy array</p>
+<p>dev data matrix</p>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">y_train:</th><td class="field-body"><p class="first">numpy array</p>
+<p>train labels vector</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">y_test:</th><td class="field-body"><p class="first">numpy array</p>
+<p>test labels vector</p>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">y_dev:</th><td class="field-body"><p class="first">numpy array</p>
+<p>dev labels vector</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">f_train:</th><td class="field-body"><p class="first">numpy array</p>
+<p>train file ids vector</p>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">f_test:</th><td class="field-body"><p class="first">numpy array</p>
+<p>test file ids vector</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">f_dev:</th><td class="field-body"><p class="first">numpy array</p>
+<p class="last">dev file ids vector</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div></blockquote>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="base.load_all_fids">
+<code class="descclassname">base.</code><code class="descname">load_all_fids</code><span class="sig-paren">(</span><em>f_name</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/base.html#load_all_fids"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#base.load_all_fids" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get file ids for all sets.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><p class="first"><strong>f_name</strong> : String</p>
+<blockquote>
+<div><p>file name</p>
+</div></blockquote>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first"><strong>fids_dic</strong> : Dictionnary</p>
+<blockquote class="last">
+<div><p>dictionary containing the data</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">f_train:</th><td class="field-body"><p class="first">numpy array</p>
+<p>train file ids vector</p>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">f_test:</th><td class="field-body"><p class="first">numpy array</p>
+<p>test file ids vector</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">f_dev:</th><td class="field-body"><p class="first">numpy array</p>
+<p class="last">dev file ids vector</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div></blockquote>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="base.load_all_labels">
+<code class="descclassname">base.</code><code class="descname">load_all_labels</code><span class="sig-paren">(</span><em>f_name</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/base.html#load_all_labels"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#base.load_all_labels" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get labels for all sets.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><p class="first"><strong>f_name</strong> : String</p>
+<blockquote>
+<div><p>file name</p>
+</div></blockquote>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first"><strong>lbl_dic</strong> : Dictionnary</p>
+<blockquote class="last">
+<div><p>dictionary containing the data</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">y_train:</th><td class="field-body"><p class="first">numpy array</p>
+<p>train labels vector</p>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">y_test:</th><td class="field-body"><p class="first">numpy array</p>
+<p>test labels vector</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">y_dev:</th><td class="field-body"><p class="first">numpy array</p>
+<p class="last">dev labels vector</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div></blockquote>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="base.load_data">
+<code class="descclassname">base.</code><code class="descname">load_data</code><span class="sig-paren">(</span><em>f_name</em>, <em>dataset</em>, <em>scale=True</em>, <em>rnd=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/base.html#load_data"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#base.load_data" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get data from from a specific set stored H5FS file.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><p class="first"><strong>f_name</strong> : String</p>
+<blockquote>
+<div><p>file name</p>
+</div></blockquote>
+<p><strong>dataset</strong> : String</p>
+<blockquote>
+<div><p>name of the set to load (e.g., train, dev, test)</p>
+</div></blockquote>
+<p><strong>scale</strong> : Boolean (default True)</p>
+<blockquote>
+<div><p>scale data to unit variance (scikit-learn function)</p>
+</div></blockquote>
+<p><strong>rnd</strong> : Boolean (default True)</p>
+<blockquote>
+<div><p>randomize the data along time axis</p>
+</div></blockquote>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first"><strong>data_dic</strong> : Dictionnary</p>
+<blockquote class="last">
+<div><p>dictionary containing the data</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">data:</th><td class="field-body"><p class="first">numpy array</p>
+<p class="last">data matrix</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div></blockquote>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="base.load_data_labels">
+<code class="descclassname">base.</code><code class="descname">load_data_labels</code><span class="sig-paren">(</span><em>f_name</em>, <em>dataset</em>, <em>scale=True</em>, <em>rnd=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/base.html#load_data_labels"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#base.load_data_labels" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get data with labels, for a particular set.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><p class="first"><strong>f_name</strong> : String</p>
+<blockquote>
+<div><p>file name</p>
+</div></blockquote>
+<p><strong>dataset</strong> : String</p>
+<blockquote>
+<div><p>name of the set to load (e.g., train, dev, test)</p>
+</div></blockquote>
+<p><strong>scale</strong> : Boolean (default True)</p>
+<blockquote>
+<div><p>scale data to unit variance (scikit-learn function)</p>
+</div></blockquote>
+<p><strong>rnd</strong> : Boolean (default True)</p>
+<blockquote>
+<div><p>randomize the data along time axis</p>
+</div></blockquote>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first"><strong>data_dic</strong> : Dictionnary</p>
+<blockquote class="last">
+<div><p>dictionary containing the data</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">x:</th><td class="field-body"><p class="first">numpy array</p>
+<p>data matrix</p>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">y:</th><td class="field-body"><p class="first">numpy array</p>
+<p class="last">labels vector</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div></blockquote>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="base.load_data_labels_fids">
+<code class="descclassname">base.</code><code class="descname">load_data_labels_fids</code><span class="sig-paren">(</span><em>f_name</em>, <em>dataset</em>, <em>scale=True</em>, <em>rnd=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/base.html#load_data_labels_fids"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#base.load_data_labels_fids" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get data with labels and file ids for a specific set.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><p class="first"><strong>f_name</strong> : String</p>
+<blockquote>
+<div><p>file name</p>
+</div></blockquote>
+<p><strong>dataset</strong> : String</p>
+<blockquote>
+<div><p>name of the set to load (e.g., train, dev, test)</p>
+</div></blockquote>
+<p><strong>scale</strong> : Boolean (default True)</p>
+<blockquote>
+<div><p>scale data to unit variance (scikit-learn function)</p>
+</div></blockquote>
+<p><strong>rnd</strong> : Boolean (default True)</p>
+<blockquote>
+<div><p>randomize the data along time axis</p>
+</div></blockquote>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first"><strong>data_dic</strong> : Dictionnary</p>
+<blockquote class="last">
+<div><p>dictionary containing the data</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">x:</th><td class="field-body"><p class="first">numpy array</p>
+<p>data matrix</p>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">y:</th><td class="field-body"><p class="first">numpy array</p>
+<p>labels vector</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">f:</th><td class="field-body"><p class="first">numpy array</p>
+<p class="last">file ids vector</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div></blockquote>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="base.load_fids">
+<code class="descclassname">base.</code><code class="descname">load_fids</code><span class="sig-paren">(</span><em>f_name</em>, <em>dataset</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/base.html#load_fids"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#base.load_fids" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get file ids for a specific set.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><p class="first"><strong>f_name</strong> : String</p>
+<blockquote>
+<div><p>file name</p>
+</div></blockquote>
+<p><strong>dataset</strong> : String</p>
+<blockquote>
+<div><p>name of the set to load (e.g., train, dev, test)</p>
+</div></blockquote>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first"><strong>fids_dic</strong> : Dictionnary</p>
+<blockquote class="last">
+<div><p>dictionary containing the files ids</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">file_ids:</th><td class="field-body"><p class="first">numpy array</p>
+<p class="last">file ids vector</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div></blockquote>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="base.load_labels">
+<code class="descclassname">base.</code><code class="descname">load_labels</code><span class="sig-paren">(</span><em>f_name</em>, <em>dataset</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/base.html#load_labels"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#base.load_labels" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get labels for a specific set.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><p class="first"><strong>f_name</strong> : String</p>
+<blockquote>
+<div><p>file name</p>
+</div></blockquote>
+<p><strong>dataset</strong> : String</p>
+<blockquote>
+<div><p>name of the set to load (e.g., train, dev, test)</p>
+</div></blockquote>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first"><strong>lbl_dic</strong> : Dictionnary</p>
+<blockquote class="last">
+<div><p>dictionary containing the labels</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">labels:</th><td class="field-body"><p class="first">numpy array</p>
+<p class="last">labels vector</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div></blockquote>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="base.nnrandn">
+<code class="descclassname">base.</code><code class="descname">nnrandn</code><span class="sig-paren">(</span><em>shape</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/base.html#nnrandn"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#base.nnrandn" title="Permalink to this definition">¶</a></dt>
+<dd><p>generates randomly a nonnegative ndarray of given shape</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><p class="first"><strong>shape</strong> : tuple</p>
+<blockquote>
+<div><p>The shape</p>
+</div></blockquote>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first"><strong>out</strong> : array of given shape</p>
+<blockquote class="last">
+<div><p>The non-negative random numbers</p>
+</div></blockquote>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="base.norm_col">
+<code class="descclassname">base.</code><code class="descname">norm_col</code><span class="sig-paren">(</span><em>w</em>, <em>h</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/base.html#norm_col"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#base.norm_col" title="Permalink to this definition">¶</a></dt>
+<dd><p>normalize the column vector w (Theano function).
+Apply the invert normalization on h such that w.h does not change</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><p class="first"><strong>w: Theano vector</strong></p>
+<blockquote>
+<div><p>vector to be normalised</p>
+</div></blockquote>
+<p><strong>h: Ttheano vector</strong></p>
+<blockquote>
+<div><p>vector to be normalised by the invert normalistation</p>
+</div></blockquote>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first"><strong>w</strong> : Theano vector with the same shape as w</p>
+<blockquote>
+<div><p>normalised vector (w/norm)</p>
+</div></blockquote>
+<p><strong>h</strong> : Theano vector with the same shape as h</p>
+<blockquote class="last">
+<div><p>h*norm</p>
+</div></blockquote>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+</div>
+<span class="target" id="module-costs"></span><div class="section" id="cost-py">
+<h2>cost.py<a class="headerlink" href="#cost-py" title="Permalink to this headline">¶</a></h2>
+<div class="topic">
+<p class="topic-title first">Contents</p>
+<p>The cost module regroups the cost functions used for the group NMF</p>
+</div>
+<dl class="function">
+<dt id="costs.beta_div">
+<code class="descclassname">costs.</code><code class="descname">beta_div</code><span class="sig-paren">(</span><em>X</em>, <em>W</em>, <em>H</em>, <em>beta</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/costs.html#beta_div"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#costs.beta_div" title="Permalink to this definition">¶</a></dt>
+<dd><p>Compute beta divergence D(X|WH)</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><p class="first"><strong>X</strong> : Theano tensor</p>
+<blockquote>
+<div><p>data</p>
+</div></blockquote>
+<p><strong>W</strong> : Theano tensor</p>
+<blockquote>
+<div><p>Bases</p>
+</div></blockquote>
+<p><strong>H</strong> : Theano tensor</p>
+<blockquote>
+<div><p>activation matrix</p>
+</div></blockquote>
+<p><strong>beta</strong> : Theano scalar</p>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first"><strong>div</strong> : Theano scalar</p>
+<blockquote class="last">
+<div><p>beta divergence D(X|WH)</p>
+</div></blockquote>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+</div>
+<span class="target" id="module-updates"></span><div class="section" id="updates-py">
+<h2>updates.py<a class="headerlink" href="#updates-py" title="Permalink to this headline">¶</a></h2>
+<div class="topic">
+<p class="topic-title first">Contents</p>
+<p>The update module regroups the update functions used for
+the mini-batch NMF</p>
+</div>
+<dl class="function">
+<dt id="updates.gradient_h">
+<code class="descclassname">updates.</code><code class="descname">gradient_h</code><span class="sig-paren">(</span><em>X</em>, <em>W</em>, <em>H</em>, <em>beta</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/updates.html#gradient_h"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#updates.gradient_h" title="Permalink to this definition">¶</a></dt>
+<dd><p>Compute the gradient of the beta-divergence relatively to the factor H</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><p class="first"><strong>X: theano tensor</strong></p>
+<blockquote>
+<div><p>Data matrix to be decomposed</p>
+</div></blockquote>
+<p><strong>W: theano tensor</strong></p>
+<blockquote>
+<div><p>Factor matrix containing the bases of the decomposition</p>
+</div></blockquote>
+<p><strong>H: theano tensor</strong></p>
+<blockquote>
+<div><p>Factor matrix containing the actiovations of the decomposition</p>
+</div></blockquote>
+<p><strong>beta: theano scalar</strong></p>
+<blockquote>
+<div><p>Coefficient beta for the beta-divergence
+Special cases:
+* beta = 1: Itakura-Saito
+* beta = 1: Kullback-Leibler
+* beta = 2: Euclidean distance</p>
+</div></blockquote>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">grad_h: theano matrix</p>
+<blockquote class="last">
+<div><p>Gradient of the local beta-divergence with respect to H</p>
+</div></blockquote>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="updates.gradient_h_mu">
+<code class="descclassname">updates.</code><code class="descname">gradient_h_mu</code><span class="sig-paren">(</span><em>X</em>, <em>W</em>, <em>H</em>, <em>beta</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/updates.html#gradient_h_mu"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#updates.gradient_h_mu" title="Permalink to this definition">¶</a></dt>
+<dd><p>Compute the gradient of the beta-divergence relatively to the factor H
+Return positive and negative contribution e.g. for multiplicative updates</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><p class="first"><strong>X: theano tensor</strong></p>
+<blockquote>
+<div><p>Data matrix to be decomposed</p>
+</div></blockquote>
+<p><strong>W: theano tensor</strong></p>
+<blockquote>
+<div><p>Factor matrix containing the bases of the decomposition</p>
+</div></blockquote>
+<p><strong>H: theano tensor</strong></p>
+<blockquote>
+<div><p>Factor matrix containing the actiovations of the decomposition</p>
+</div></blockquote>
+<p><strong>beta: theano scalar</strong></p>
+<blockquote>
+<div><p>Coefficient beta for the beta-divergence
+Special cases:
+* beta = 1: Itakura-Saito
+* beta = 1: Kullback-Leibler
+* beta = 2: Euclidean distance</p>
+</div></blockquote>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">grad_h: theano matrix (T.stack(grad_h_pos, grad_h_neg))</p>
+<blockquote class="last">
+<div><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">grad_h_pos:</th><td class="field-body">Positive term of the gradient
+of the local beta-divergence with respect to H</td>
+</tr>
+<tr class="field-even field"><th class="field-name">grad_h_neg:</th><td class="field-body">Positive term of the gradient
+of the local beta-divergence with respect to H</td>
+</tr>
+</tbody>
+</table>
+</div></blockquote>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="updates.gradient_w">
+<code class="descclassname">updates.</code><code class="descname">gradient_w</code><span class="sig-paren">(</span><em>X</em>, <em>W</em>, <em>H</em>, <em>beta</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/updates.html#gradient_w"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#updates.gradient_w" title="Permalink to this definition">¶</a></dt>
+<dd><p>Compute the gradient of the beta-divergence relatively to the factor W</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><p class="first"><strong>X: theano tensor</strong></p>
+<blockquote>
+<div><p>Data matrix to be decomposed</p>
+</div></blockquote>
+<p><strong>W: theano tensor</strong></p>
+<blockquote>
+<div><p>Factor matrix containing the bases of the decomposition</p>
+</div></blockquote>
+<p><strong>H: theano tensor</strong></p>
+<blockquote>
+<div><p>Factor matrix containing the actiovations of the decomposition</p>
+</div></blockquote>
+<p><strong>beta: theano scalar</strong></p>
+<blockquote>
+<div><p>Coefficient beta for the beta-divergence
+Special cases:
+* beta = 1: Itakura-Saito
+* beta = 1: Kullback-Leibler
+* beta = 2: Euclidean distance</p>
+</div></blockquote>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">grad_w: theano matrix</p>
+<blockquote class="last">
+<div><p>Gradient of the local beta-divergence with respect to W</p>
+</div></blockquote>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="updates.gradient_w_mu">
+<code class="descclassname">updates.</code><code class="descname">gradient_w_mu</code><span class="sig-paren">(</span><em>X</em>, <em>W</em>, <em>H</em>, <em>beta</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/updates.html#gradient_w_mu"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#updates.gradient_w_mu" title="Permalink to this definition">¶</a></dt>
+<dd><p>Compute the gradient of the beta-divergence relatively to the factor W
+Return positive and negative contribution e.g. for multiplicative updates</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><p class="first"><strong>X: theano tensor</strong></p>
+<blockquote>
+<div><p>Data matrix to be decomposed</p>
+</div></blockquote>
+<p><strong>W: theano tensor</strong></p>
+<blockquote>
+<div><p>Factor matrix containing the bases of the decomposition</p>
+</div></blockquote>
+<p><strong>H: theano tensor</strong></p>
+<blockquote>
+<div><p>Factor matrix containing the actiovations of the decomposition</p>
+</div></blockquote>
+<p><strong>beta: theano scalar</strong></p>
+<blockquote>
+<div><p>Coefficient beta for the beta-divergence
+Special cases:
+* beta = 1: Itakura-Saito
+* beta = 1: Kullback-Leibler
+* beta = 2: Euclidean distance</p>
+</div></blockquote>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">grad_w: theano matrix (T.stack(grad_w_pos, grad_w_neg))</p>
+<blockquote class="last">
+<div><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">grad_w_pos:</th><td class="field-body">Positive term of the gradient
+of the local beta-divergence with respect to W</td>
+</tr>
+<tr class="field-even field"><th class="field-name">grad_w_neg:</th><td class="field-body">Positive term of the gradient
+of the local beta-divergence with respect to W</td>
+</tr>
+</tbody>
+</table>
+</div></blockquote>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="updates.mu_update">
+<code class="descclassname">updates.</code><code class="descname">mu_update</code><span class="sig-paren">(</span><em>factor</em>, <em>gradient_pos</em>, <em>gradient_neg</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/updates.html#mu_update"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#updates.mu_update" title="Permalink to this definition">¶</a></dt>
+<dd><p>Update the factor based on multiplicative rules</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><p class="first"><strong>factor: theano tensor</strong></p>
+<blockquote>
+<div><p>The factor to be updated</p>
+</div></blockquote>
+<p><strong>gradient_pos: theano tensor</strong></p>
+<blockquote>
+<div><p>Positive part of gradient relatively to factor</p>
+</div></blockquote>
+<p><strong>gradient_neg: theano tensor</strong></p>
+<blockquote>
+<div><p>Negative part of gradient relatively to factor</p>
+</div></blockquote>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">factor: theano matrix</p>
+<blockquote class="last">
+<div><p>New value of factor update with multiplicative updates</p>
+</div></blockquote>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="updates.mu_update_h">
+<code class="descclassname">updates.</code><code class="descname">mu_update_h</code><span class="sig-paren">(</span><em>X</em>, <em>W</em>, <em>H</em>, <em>beta</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/updates.html#mu_update_h"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#updates.mu_update_h" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="docutils">
+<dt>Compute the gradient of the beta-divergence relatively to the factor H</dt>
+<dd>and update H with multiplicative rules</dd>
+</dl>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><p class="first"><strong>X: theano tensor</strong></p>
+<blockquote>
+<div><p>Data matrix to be decompsed</p>
+</div></blockquote>
+<p><strong>W: theano tensor</strong></p>
+<blockquote>
+<div><p>Factor matrix containing the bases of the decomposition</p>
+</div></blockquote>
+<p><strong>H: theano tensor</strong></p>
+<blockquote>
+<div><p>Factor matrix containing the activations of the decomposition</p>
+</div></blockquote>
+<p><strong>beta: theano scalar</strong></p>
+<blockquote>
+<div><p>Coefficient beta for the beta-divergence
+Special cases:
+* beta = 1: Itakura-Saito
+* beta = 1: Kullback-Leibler
+* beta = 2: Euclidean distance</p>
+</div></blockquote>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">H: theano matrix</p>
+<blockquote class="last">
+<div><p>New value of H updated with multiplicative updates</p>
+</div></blockquote>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="updates.update_grad_w">
+<code class="descclassname">updates.</code><code class="descname">update_grad_w</code><span class="sig-paren">(</span><em>grad</em>, <em>grad_old</em>, <em>grad_new</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/updates.html#update_grad_w"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#updates.update_grad_w" title="Permalink to this definition">¶</a></dt>
+<dd><p>Update the global gradient for W</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><p class="first"><strong>grad: theano tensor</strong></p>
+<blockquote>
+<div><p>The global gradient</p>
+</div></blockquote>
+<p><strong>grad_old: theano tensor</strong></p>
+<blockquote>
+<div><p>The previous value of the local gradient</p>
+</div></blockquote>
+<p><strong>grad_new: theano tensor</strong></p>
+<blockquote>
+<div><p>The new version of the local gradient</p>
+</div></blockquote>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">grad: theano tensor</p>
+<blockquote class="last">
+<div><p>New value of the global gradient</p>
+</div></blockquote>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Documentation</a><ul>
+<li><a class="reference internal" href="#beta-nmf-minibatch-py">beta_nmf_minibatch.py</a></li>
+<li><a class="reference internal" href="#base-py">base.py</a></li>
+<li><a class="reference internal" href="#cost-py">cost.py</a></li>
+<li><a class="reference internal" href="#updates-py">updates.py</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="intro.html"
+                        title="previous chapter">Group-NMF with  <span class="math">\(\beta\)</span> -divergence</a></p>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/doc.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="intro.html" title="Group-NMF with \(\beta\) -divergence"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">Beta NMF with mini-batch updates 1.0 documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &copy; Copyright 2016, Romain Serizel.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.1.
+    </div>
+  </body>
+</html>
