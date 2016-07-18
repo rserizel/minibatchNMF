@@ -1,0 +1,683 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>beta_nmf_minibatch &mdash; Beta NMF with mini-batch updates 1.0 documentation</title>
+    
+    <link rel="stylesheet" href="../_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="Beta NMF with mini-batch updates 1.0 documentation" href="../index.html" />
+    <link rel="up" title="Module code" href="index.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../index.html">Beta NMF with mini-batch updates 1.0 documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="index.html" accesskey="U">Module code</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for beta_nmf_minibatch</h1><div class="highlight"><pre>
+<span></span><span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">beta\_nmf_minibatch.py</span>
+<span class="sd">~~~~~~~~~~~</span>
+
+<span class="sd">.. topic:: Contents</span>
+
+<span class="sd">  The beta_nmf_minibatch module includes the betaNMF class,</span>
+<span class="sd">  fit function and theano functions to compute updates and cost.&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">theano</span>
+<span class="kn">import</span> <span class="nn">base</span>
+<span class="kn">import</span> <span class="nn">theano.tensor</span> <span class="kn">as</span> <span class="nn">T</span>
+<span class="kn">import</span> <span class="nn">updates</span>
+<span class="kn">import</span> <span class="nn">costs</span>
+
+
+<div class="viewcode-block" id="BetaNMF"><a class="viewcode-back" href="../doc.html#beta_nmf_minibatch.BetaNMF">[docs]</a><span class="k">class</span> <span class="nc">BetaNMF</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;BetaNMF class</span>
+
+<span class="sd">    Performs nonnegative matrix factorization with mini-batch multiplicative</span>
+<span class="sd">    updates. GPGPU implementation based on Theano.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    data_shape : tuple composed of integers</span>
+<span class="sd">        The shape of the data to approximate</span>
+
+<span class="sd">    n_components : positive integer</span>
+<span class="sd">        The number of latent components for the NMF model</span>
+
+
+<span class="sd">    beta: arbitrary float.</span>
+<span class="sd">        The beta-divergence to consider. Particular cases of interest are</span>
+<span class="sd">         * beta=2 : Euclidean distance</span>
+<span class="sd">         * beta=1 : Kullback Leibler</span>
+<span class="sd">         * beta=0 : Itakura-Saito</span>
+
+<span class="sd">    n_iter: positive integer</span>
+<span class="sd">         number of iterations</span>
+
+<span class="sd">    fixed_factors: array of intergers</span>
+<span class="sd">        Indexes of the factors that are kept fixed during the updates</span>
+<span class="sd">        * [0] : corresponds to fixed H</span>
+<span class="sd">        * [1] : corresponds to fixed W</span>
+
+<span class="sd">    cache1_size: integer</span>
+<span class="sd">        Size (in frames) of the first data cache.</span>
+<span class="sd">        The size is reduced to the closest multiple of the batch_size.</span>
+<span class="sd">        If set to zero the algorithm tries to fit all the data in cache</span>
+
+<span class="sd">    batch_size: integer</span>
+<span class="sd">        Size (in frames) of the batch for batch processing.</span>
+<span class="sd">        The batch size has an impact on the parrelization and the memory needed</span>
+<span class="sd">        to store partial gradients (see Schmidt et al.)</span>
+
+<span class="sd">    verbose: integer</span>
+<span class="sd">        The numer of iterations to wait between two computation and printing</span>
+<span class="sd">        of the cost</span>
+
+<span class="sd">    init : string (default &#39;random&#39;)</span>
+<span class="sd">        * random : initalise the factors randomly</span>
+<span class="sd">        * custom : intialise the factors with custom value</span>
+
+<span class="sd">    W : array (optionnal)</span>
+<span class="sd">        Initial wvalue for factor W when custom initialisation is used</span>
+
+<span class="sd">    H : array (optionnal)</span>
+<span class="sd">        Initial wvalue for factor H when custom initialisation is used</span>
+
+<span class="sd">    solver : string (default &#39;mu_batch&#39;)</span>
+<span class="sd">        * mu_batch : mini-batch version of the MU updates.</span>
+<span class="sd">         (fully equivalent to standard NMF with MU).</span>
+<span class="sd">        * asg_mu : Asymetric stochatistic gradient for MU [1]_</span>
+<span class="sd">        * gsg_mu : Greedy stochatistic gradient for  MU [1]_</span>
+<span class="sd">        * asag_mu : Asymetric stochatistic average gradient [2]_ for MU [1]_</span>
+<span class="sd">        * gsag_mu : Greedy stochatistic average gradient [2]_ for MU [1]_</span>
+
+<span class="sd">    nb_batch_w : interger (default 1)</span>
+<span class="sd">        number of batches on which W updates is computed</span>
+<span class="sd">        * 1 : greedy approaches [1]_</span>
+
+<span class="sd">    sag_memory : integer (default 0)</span>
+<span class="sd">        number of batches used to compute the average gradient</span>
+<span class="sd">        * 0 : SG approaches</span>
+<span class="sd">        * nb_batches : SAG approaches</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    nb_cache1 : integer</span>
+<span class="sd">        number of caches needed to fill the full data</span>
+
+<span class="sd">    forget_factor : float</span>
+<span class="sd">        forgetting factor for SAG</span>
+
+<span class="sd">    scores : array</span>
+<span class="sd">        reconstruction cost and iteration time for each iteration</span>
+
+<span class="sd">    factors\_ : list of arrays</span>
+<span class="sd">        The estimated factors</span>
+
+<span class="sd">    w : theano tensor</span>
+<span class="sd">        factor W</span>
+
+<span class="sd">    h_cache1 : theano tensor</span>
+<span class="sd">        part of the factor H in cache1</span>
+
+<span class="sd">    x_cache1 : theano tensor</span>
+<span class="sd">        data cache</span>
+
+<span class="sd">    References</span>
+<span class="sd">    ----------</span>
+<span class="sd">    .. [#] R. Serizel, S. Essid, and G. Richard. “Mini-batch stochastic</span>
+<span class="sd">        approaches for accelerated multiplicative updates in nonnegative matrix</span>
+<span class="sd">        factorisation with beta-divergence”. Accepted for publication</span>
+<span class="sd">        In *Proc. of MLSP*, p. 5, 2016.</span>
+
+<span class="sd">    .. [#] Schmidt, M., Roux, N. L., &amp; Bach, F. (2013).</span>
+<span class="sd">        Minimizing finite sums with the stochastic average gradient</span>
+<span class="sd">        https://hal.inria.fr/hal-00860051/PDF/sag_journal.pdf</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="c1"># Constructor</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data_shape</span><span class="p">,</span> <span class="n">n_components</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">beta</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">n_iter</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span>
+                 <span class="n">fixed_factors</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">cache1_size</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                 <span class="n">batch_size</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                 <span class="n">init</span><span class="o">=</span><span class="s1">&#39;random&#39;</span><span class="p">,</span> <span class="n">W</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">H</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">solver</span><span class="o">=</span><span class="s1">&#39;mu_batch&#39;</span><span class="p">,</span>
+                 <span class="n">nb_batch_w</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">sag_memory</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">data_shape</span> <span class="o">=</span> <span class="n">data_shape</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_components</span> <span class="o">=</span> <span class="n">n_components</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">=</span> <span class="n">batch_size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nb_batch</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">true_divide</span><span class="p">(</span><span class="n">data_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                                                   <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">batch_ind</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">nb_batch</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">))</span>
+
+        <span class="k">if</span> <span class="n">cache1_size</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">cache1_size</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;cache1_size should be at &#39;</span>
+                                 <span class="s1">&#39;least equal to batch_size&#39;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cache1_size</span> <span class="o">=</span> <span class="n">cache1_size</span><span class="o">/</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">nb_cache1</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">true_divide</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                                                        <span class="bp">self</span><span class="o">.</span><span class="n">cache1_size</span><span class="p">)))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cache1_size</span> <span class="o">=</span> <span class="n">data_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">nb_cache1</span> <span class="o">=</span> <span class="mi">1</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_components</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">n_components</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s1">&#39;int32&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">beta</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">beta</span><span class="p">,</span> <span class="n">theano</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">floatX</span><span class="p">),</span>
+                                  <span class="n">name</span><span class="o">=</span><span class="s2">&quot;beta&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sag_memory</span> <span class="o">=</span> <span class="n">sag_memory</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">forget_factor</span> <span class="o">=</span> <span class="mf">1.</span><span class="o">/</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sag_memory</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span> <span class="o">=</span> <span class="n">verbose</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_iter</span> <span class="o">=</span> <span class="n">n_iter</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">solver</span> <span class="o">=</span> <span class="n">solver</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scores</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nb_batch_w</span> <span class="o">=</span> <span class="n">nb_batch_w</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fixed_factors</span> <span class="o">=</span> <span class="n">fixed_factors</span>
+        <span class="n">fact_</span> <span class="o">=</span> <span class="p">[</span><span class="n">base</span><span class="o">.</span><span class="n">nnrandn</span><span class="p">((</span><span class="n">dim</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_components</span><span class="p">))</span> <span class="k">for</span> <span class="n">dim</span> <span class="ow">in</span> <span class="n">data_shape</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">init</span> <span class="o">==</span> <span class="s1">&#39;custom&#39;</span><span class="p">:</span>
+            <span class="n">fact_</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">H</span>
+            <span class="n">fact_</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">W</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">w</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">fact_</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">theano</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">floatX</span><span class="p">),</span>
+                               <span class="n">name</span><span class="o">=</span><span class="s2">&quot;W&quot;</span><span class="p">,</span> <span class="n">borrow</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span> <span class="n">allow_downcast</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">h_cache1</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">fact_</span><span class="p">[</span><span class="mi">0</span><span class="p">][:</span><span class="bp">self</span><span class="o">.</span><span class="n">cache1_size</span><span class="p">,</span>
+                                               <span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">theano</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">floatX</span><span class="p">),</span>
+                                      <span class="n">name</span><span class="o">=</span><span class="s2">&quot;H cache1&quot;</span><span class="p">,</span> <span class="n">borrow</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span>
+                                      <span class="n">allow_downcast</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">factors_</span> <span class="o">=</span> <span class="n">fact_</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">x_cache1</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">cache1_size</span><span class="p">,</span>
+                                                <span class="n">data_shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span>
+            <span class="n">theano</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">floatX</span><span class="p">),</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;X cache1&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">init</span><span class="p">()</span>
+
+<div class="viewcode-block" id="BetaNMF.fit"><a class="viewcode-back" href="../doc.html#beta_nmf_minibatch.BetaNMF.fit">[docs]</a>    <span class="k">def</span> <span class="nf">fit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">full_sag</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span> <span class="n">cyclic</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Learns NMF model</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        data : ndarray with nonnegative entries</span>
+<span class="sd">            The input array</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">prepare_batch</span><span class="p">(</span><span class="o">~</span><span class="n">cyclic</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">prepare_cache1</span><span class="p">(</span><span class="o">~</span><span class="n">cyclic</span><span class="p">)</span>
+        <span class="n">div_func</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_div_function</span><span class="p">()</span>
+        <span class="n">scores</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">n_iter</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">solver</span> <span class="ow">is</span> <span class="s1">&#39;asag_mu&#39;</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">solver</span> <span class="ow">is</span> <span class="s1">&#39;gsag_mu&#39;</span><span class="p">:</span>
+            <span class="n">grad_func</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_gradient_mu_sag</span><span class="p">()</span>
+            <span class="n">update_func</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_updates</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">solver</span> <span class="ow">is</span> <span class="s1">&#39;asg_mu&#39;</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">solver</span> <span class="ow">is</span> <span class="s1">&#39;gsg_mu&#39;</span><span class="p">:</span>
+            <span class="n">grad_func</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_gradient_mu_sg</span><span class="p">()</span>
+            <span class="n">update_func</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_updates</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">solver</span> <span class="ow">is</span> <span class="s1">&#39;mu_batch&#39;</span><span class="p">:</span>
+            <span class="n">grad_func</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_gradient_mu_batch</span><span class="p">()</span>
+            <span class="n">update_func</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_updates</span><span class="p">()</span>
+        <span class="n">tick</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+        <span class="n">score</span> <span class="o">=</span> <span class="mi">0</span>
+
+        <span class="k">for</span> <span class="n">cache_ind</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nb_cache1</span><span class="p">):</span>
+            <span class="n">current_cache_ind</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">hstack</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_ind</span><span class="p">[</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">cache1_ind</span><span class="p">[</span>
+                        <span class="n">cache_ind</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache1_ind</span><span class="p">[</span><span class="n">cache_ind</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">]])</span>
+            <span class="n">current_cache_ind</span> <span class="o">=</span> <span class="n">current_cache_ind</span><span class="p">[</span><span class="n">current_cache_ind</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">x_cache1</span><span class="o">.</span><span class="n">set_value</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="n">current_cache_ind</span><span class="p">,</span> <span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span>
+                    <span class="n">theano</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">floatX</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">h_cache1</span><span class="o">.</span><span class="n">set_value</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">factors_</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span>
+                    <span class="n">current_cache_ind</span><span class="p">,</span> <span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">theano</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">floatX</span><span class="p">))</span>
+            <span class="n">score</span> <span class="o">+=</span> <span class="n">div_func</span><span class="p">[</span><span class="s1">&#39;div_cache1&#39;</span><span class="p">]()</span>
+
+        <span class="n">scores</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">score</span><span class="p">,</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">tick</span><span class="p">]</span>
+
+        <span class="k">print</span> <span class="s1">&#39;Intitial score = </span><span class="si">%.1f</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">score</span>
+        <span class="k">print</span> <span class="s1">&#39;Fitting NMF model with </span><span class="si">%d</span><span class="s1"> iterations....&#39;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_iter</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">nb_cache1</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">current_cache_ind</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">hstack</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_ind</span><span class="p">[</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">cache1_ind</span><span class="p">[</span>
+                    <span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache1_ind</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">]])</span>
+            <span class="n">current_cache_ind</span> <span class="o">=</span> <span class="n">current_cache_ind</span><span class="p">[</span><span class="n">current_cache_ind</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">x_cache1</span><span class="o">.</span><span class="n">set_value</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="n">current_cache_ind</span><span class="p">,</span> <span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span>
+                <span class="n">theano</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">floatX</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">h_cache1</span><span class="o">.</span><span class="n">set_value</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">factors_</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span>
+                <span class="n">current_cache_ind</span><span class="p">,</span> <span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">theano</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">floatX</span><span class="p">))</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">solver</span> <span class="ow">is</span> <span class="s1">&#39;sag&#39;</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">c1_grad_w</span><span class="o">.</span><span class="n">set_value</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">old_grad_w</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">cache1_ind</span><span class="p">[</span>
+                        <span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache1_ind</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">]]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span>
+                    <span class="n">theano</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">floatX</span><span class="p">))</span>
+        <span class="c1"># main loop</span>
+        <span class="k">for</span> <span class="n">it</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_iter</span><span class="p">):</span>
+            <span class="n">tick</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">prepare_cache1</span><span class="p">(</span><span class="o">~</span><span class="n">cyclic</span><span class="p">)</span>
+            <span class="n">score</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="k">for</span> <span class="n">cache_ind</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nb_cache1</span><span class="p">):</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">nb_cache1</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="n">current_cache_ind</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">hstack</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_ind</span><span class="p">[</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">cache1_ind</span><span class="p">[</span>
+                            <span class="n">cache_ind</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache1_ind</span><span class="p">[</span><span class="n">cache_ind</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">]])</span>
+                    <span class="n">current_cache_ind</span> <span class="o">=</span> <span class="n">current_cache_ind</span><span class="p">[</span>
+                        <span class="n">current_cache_ind</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">]</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">x_cache1</span><span class="o">.</span><span class="n">set_value</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="n">current_cache_ind</span><span class="p">,</span> <span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span>
+                        <span class="n">theano</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">floatX</span><span class="p">))</span>
+
+                    <span class="bp">self</span><span class="o">.</span><span class="n">h_cache1</span><span class="o">.</span><span class="n">set_value</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">factors_</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span>
+                        <span class="n">current_cache_ind</span><span class="p">,</span> <span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">theano</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">floatX</span><span class="p">))</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">solver</span> <span class="ow">is</span> <span class="s1">&#39;sag&#39;</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">c1_grad_w</span><span class="o">.</span><span class="n">set_value</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">old_grad_w</span><span class="p">[</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">cache1_ind</span><span class="p">[</span>
+                                <span class="n">cache_ind</span><span class="p">,</span>
+                                <span class="bp">self</span><span class="o">.</span><span class="n">cache1_ind</span><span class="p">[</span><span class="n">cache_ind</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">]]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span>
+                            <span class="n">theano</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">floatX</span><span class="p">))</span>
+                <span class="k">for</span> <span class="n">batch_i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cache1_ind</span><span class="p">[</span>
+                        <span class="n">cache_ind</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache1_ind</span><span class="p">[</span><span class="n">cache_ind</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
+                    <span class="n">batch_ind</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">batch_i</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
+                                          <span class="p">(</span><span class="n">batch_i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)</span>
+                    <span class="n">batch_ind</span> <span class="o">=</span> <span class="n">batch_ind</span><span class="p">[</span>
+                        <span class="n">batch_ind</span> <span class="o">&lt;</span> <span class="n">current_cache_ind</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>
+                    <span class="n">batch_ind</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">([</span><span class="n">batch_ind</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                                            <span class="n">batch_ind</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span><span class="p">])</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span>
+                        <span class="n">theano</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">floatX</span><span class="p">)</span>
+
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">solver</span> <span class="ow">is</span> <span class="s1">&#39;mu_batch&#39;</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">update_mu_batch_h</span><span class="p">(</span><span class="n">batch_ind</span><span class="p">,</span>
+                                               <span class="n">update_func</span><span class="p">,</span> <span class="n">grad_func</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">solver</span> <span class="ow">is</span> <span class="s1">&#39;asag_mu&#39;</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">solver</span> <span class="ow">is</span> <span class="s1">&#39;asg_mu&#39;</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">update_mu_sag</span><span class="p">(</span><span class="n">batch_ind</span><span class="p">,</span>
+                                           <span class="n">update_func</span><span class="p">,</span> <span class="n">grad_func</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">solver</span> <span class="ow">is</span> <span class="s1">&#39;gsag_mu&#39;</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">solver</span> <span class="ow">is</span> <span class="s1">&#39;gsg_mu&#39;</span><span class="p">:</span>
+                        <span class="n">grad_func</span><span class="p">[</span><span class="s1">&#39;grad_h&#39;</span><span class="p">](</span><span class="n">batch_ind</span><span class="p">)</span>
+                        <span class="n">update_func</span><span class="p">[</span><span class="s1">&#39;train_h&#39;</span><span class="p">](</span><span class="n">batch_ind</span><span class="p">)</span>
+                        <span class="k">if</span> <span class="n">batch_i</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">cache_ind</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                            <span class="n">grad_func</span><span class="p">[</span><span class="s1">&#39;grad_w&#39;</span><span class="p">](</span><span class="n">batch_ind</span><span class="p">)</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">nb_cache1</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">factors_</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">current_cache_ind</span><span class="p">,</span> <span class="p">]</span> <span class="o">=</span>\
+                        <span class="bp">self</span><span class="o">.</span><span class="n">h_cache1</span><span class="o">.</span><span class="n">get_value</span><span class="p">()</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">solver</span> <span class="ow">is</span> <span class="s1">&#39;mu_batch&#39;</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">update_mu_batch_w</span><span class="p">(</span><span class="n">update_func</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">solver</span> <span class="ow">is</span> <span class="s1">&#39;gsag_mu&#39;</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">solver</span> <span class="ow">is</span> <span class="s1">&#39;gsg_mu&#39;</span><span class="p">:</span>
+                <span class="n">update_func</span><span class="p">[</span><span class="s1">&#39;train_w&#39;</span><span class="p">]()</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">nb_cache1</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">cache_ind</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nb_cache1</span><span class="p">):</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">x_cache1</span><span class="o">.</span><span class="n">set_value</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">hstack</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_ind</span><span class="p">[</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">cache1_ind</span><span class="p">[</span>
+                            <span class="n">cache_ind</span><span class="p">,</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">cache1_ind</span><span class="p">[</span><span class="n">cache_ind</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">]]),</span> <span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span>
+                        <span class="n">theano</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">floatX</span><span class="p">))</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">h_cache1</span><span class="o">.</span><span class="n">set_value</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">factors_</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span>
+                        <span class="n">np</span><span class="o">.</span><span class="n">hstack</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_ind</span><span class="p">[</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">cache1_ind</span><span class="p">[</span>
+                                <span class="n">cache_ind</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache1_ind</span><span class="p">[</span><span class="n">cache_ind</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">]]),</span>
+                        <span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">theano</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">floatX</span><span class="p">))</span>
+                    <span class="n">score</span> <span class="o">+=</span> <span class="n">div_func</span><span class="p">[</span><span class="s1">&#39;div_cache1&#39;</span><span class="p">]()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">score</span> <span class="o">=</span> <span class="n">div_func</span><span class="p">[</span><span class="s1">&#39;div_cache1&#39;</span><span class="p">]()</span>
+
+            <span class="k">print</span> <span class="s1">&#39;Intitial score (cache1) = </span><span class="si">%.1f</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">score</span>
+            <span class="n">scores</span><span class="p">[</span><span class="n">it</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">score</span><span class="p">,</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">tick</span> <span class="o">+</span> <span class="n">scores</span><span class="p">[</span><span class="n">it</span><span class="p">,</span> <span class="mi">1</span><span class="p">]]</span>
+            <span class="n">tick</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">scores</span></div>
+
+<div class="viewcode-block" id="BetaNMF.get_div_function"><a class="viewcode-back" href="../doc.html#beta_nmf_minibatch.BetaNMF.get_div_function">[docs]</a>    <span class="k">def</span> <span class="nf">get_div_function</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; compile the theano-based divergence function&quot;&quot;&quot;</span>
+        <span class="n">div_cache1</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">function</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[],</span>
+                                     <span class="n">outputs</span><span class="o">=</span><span class="n">costs</span><span class="o">.</span><span class="n">beta_div</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">x_cache1</span><span class="p">,</span>
+                                                            <span class="bp">self</span><span class="o">.</span><span class="n">w</span><span class="o">.</span><span class="n">T</span><span class="p">,</span>
+                                                            <span class="bp">self</span><span class="o">.</span><span class="n">h_cache1</span><span class="p">,</span>
+                                                            <span class="bp">self</span><span class="o">.</span><span class="n">beta</span><span class="p">),</span>
+                                     <span class="n">name</span><span class="o">=</span><span class="s2">&quot;div c1&quot;</span><span class="p">,</span>
+                                     <span class="n">allow_input_downcast</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span> <span class="n">profile</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span>
+            <span class="n">div_cache1</span><span class="o">=</span><span class="n">div_cache1</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="BetaNMF.get_gradient_mu_sag"><a class="viewcode-back" href="../doc.html#beta_nmf_minibatch.BetaNMF.get_gradient_mu_sag">[docs]</a>    <span class="k">def</span> <span class="nf">get_gradient_mu_sag</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;compile the theano based gradient functions for mu_sag algorithms&quot;&quot;&quot;</span>
+        <span class="n">tbatch_ind</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">ivector</span><span class="p">(</span><span class="s1">&#39;batch_ind&#39;</span><span class="p">)</span>
+        <span class="n">tind</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">iscalar</span><span class="p">(</span><span class="s1">&#39;ind&#39;</span><span class="p">)</span>
+        <span class="n">grad_new</span> <span class="o">=</span> <span class="n">updates</span><span class="o">.</span><span class="n">gradient_w_mu</span><span class="p">(</span>
+                                    <span class="bp">self</span><span class="o">.</span><span class="n">x_cache1</span><span class="p">[</span><span class="n">tbatch_ind</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span><span class="n">tbatch_ind</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+                                                  <span class="p">],</span>
+                                    <span class="bp">self</span><span class="o">.</span><span class="n">w</span><span class="p">,</span>
+                                    <span class="bp">self</span><span class="o">.</span><span class="n">h_cache1</span><span class="p">[</span><span class="n">tbatch_ind</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span><span class="n">tbatch_ind</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+                                                  <span class="p">],</span>
+                                    <span class="bp">self</span><span class="o">.</span><span class="n">beta</span><span class="p">)</span>
+        <span class="n">up_grad_w</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">forget_factor</span> <span class="o">*</span> <span class="n">grad_new</span> <span class="o">+</span> <span class="p">(</span>
+            <span class="mi">1</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">forget_factor</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">grad_w</span>
+
+        <span class="n">grad_w</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">function</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">tbatch_ind</span><span class="p">],</span>
+                                 <span class="n">outputs</span><span class="o">=</span><span class="p">[],</span>
+                                 <span class="n">updates</span><span class="o">=</span><span class="p">{(</span><span class="bp">self</span><span class="o">.</span><span class="n">grad_w</span><span class="p">,</span> <span class="n">up_grad_w</span><span class="p">)},</span>
+                                 <span class="n">name</span><span class="o">=</span><span class="s2">&quot;grad w&quot;</span><span class="p">,</span>
+                                 <span class="n">allow_input_downcast</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+        <span class="n">grad_new</span> <span class="o">=</span> <span class="n">updates</span><span class="o">.</span><span class="n">gradient_h_mu</span><span class="p">(</span>
+                                    <span class="bp">self</span><span class="o">.</span><span class="n">x_cache1</span><span class="p">[</span><span class="n">tbatch_ind</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span><span class="n">tbatch_ind</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+                                                  <span class="p">],</span>
+                                    <span class="bp">self</span><span class="o">.</span><span class="n">w</span><span class="p">,</span>
+                                    <span class="bp">self</span><span class="o">.</span><span class="n">h_cache1</span><span class="p">[</span><span class="n">tbatch_ind</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span><span class="n">tbatch_ind</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+                                                  <span class="p">],</span>
+                                    <span class="bp">self</span><span class="o">.</span><span class="n">beta</span><span class="p">)</span>
+
+        <span class="n">grad_h</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">function</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">tbatch_ind</span><span class="p">],</span>
+                                 <span class="n">outputs</span><span class="o">=</span><span class="p">[],</span>
+                                 <span class="n">updates</span><span class="o">=</span><span class="p">{(</span><span class="bp">self</span><span class="o">.</span><span class="n">c1_grad_h</span><span class="p">,</span> <span class="n">grad_new</span><span class="p">)},</span>
+                                 <span class="n">name</span><span class="o">=</span><span class="s2">&quot;grad h&quot;</span><span class="p">,</span>
+                                 <span class="n">allow_input_downcast</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span>
+            <span class="n">grad_h</span><span class="o">=</span><span class="n">grad_h</span><span class="p">,</span>
+            <span class="n">grad_w</span><span class="o">=</span><span class="n">grad_w</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="BetaNMF.get_gradient_mu_sg"><a class="viewcode-back" href="../doc.html#beta_nmf_minibatch.BetaNMF.get_gradient_mu_sg">[docs]</a>    <span class="k">def</span> <span class="nf">get_gradient_mu_sg</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;compile the theano based gradient functions for mu_sg algorithms&quot;&quot;&quot;</span>
+        <span class="n">tbatch_ind</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">ivector</span><span class="p">(</span><span class="s1">&#39;batch_ind&#39;</span><span class="p">)</span>
+        <span class="n">tind</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">iscalar</span><span class="p">(</span><span class="s1">&#39;ind&#39;</span><span class="p">)</span>
+        <span class="n">grad_new</span> <span class="o">=</span> <span class="n">updates</span><span class="o">.</span><span class="n">gradient_w_mu</span><span class="p">(</span>
+                                    <span class="bp">self</span><span class="o">.</span><span class="n">x_cache1</span><span class="p">[</span><span class="n">tbatch_ind</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span><span class="n">tbatch_ind</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+                                                  <span class="p">],</span>
+                                    <span class="bp">self</span><span class="o">.</span><span class="n">w</span><span class="p">,</span>
+                                    <span class="bp">self</span><span class="o">.</span><span class="n">h_cache1</span><span class="p">[</span><span class="n">tbatch_ind</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span><span class="n">tbatch_ind</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+                                                  <span class="p">],</span>
+                                    <span class="bp">self</span><span class="o">.</span><span class="n">beta</span><span class="p">)</span>
+
+        <span class="n">grad_w</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">function</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">tbatch_ind</span><span class="p">],</span>
+                                 <span class="n">outputs</span><span class="o">=</span><span class="p">[],</span>
+                                 <span class="n">updates</span><span class="o">=</span><span class="p">{(</span><span class="bp">self</span><span class="o">.</span><span class="n">grad_w</span><span class="p">,</span> <span class="n">grad_new</span><span class="p">)},</span>
+                                 <span class="n">name</span><span class="o">=</span><span class="s2">&quot;grad w&quot;</span><span class="p">,</span>
+                                 <span class="n">allow_input_downcast</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+        <span class="n">grad_new</span> <span class="o">=</span> <span class="n">updates</span><span class="o">.</span><span class="n">gradient_h_mu</span><span class="p">(</span>
+                                    <span class="bp">self</span><span class="o">.</span><span class="n">x_cache1</span><span class="p">[</span><span class="n">tbatch_ind</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span><span class="n">tbatch_ind</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+                                                  <span class="p">],</span>
+                                    <span class="bp">self</span><span class="o">.</span><span class="n">w</span><span class="p">,</span>
+                                    <span class="bp">self</span><span class="o">.</span><span class="n">h_cache1</span><span class="p">[</span><span class="n">tbatch_ind</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span><span class="n">tbatch_ind</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+                                                  <span class="p">],</span>
+                                    <span class="bp">self</span><span class="o">.</span><span class="n">beta</span><span class="p">)</span>
+
+        <span class="n">grad_h</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">function</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">tbatch_ind</span><span class="p">],</span>
+                                 <span class="n">outputs</span><span class="o">=</span><span class="p">[],</span>
+                                 <span class="n">updates</span><span class="o">=</span><span class="p">{(</span><span class="bp">self</span><span class="o">.</span><span class="n">c1_grad_h</span><span class="p">,</span> <span class="n">grad_new</span><span class="p">)},</span>
+                                 <span class="n">name</span><span class="o">=</span><span class="s2">&quot;grad h&quot;</span><span class="p">,</span>
+                                 <span class="n">allow_input_downcast</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span>
+            <span class="n">grad_h</span><span class="o">=</span><span class="n">grad_h</span><span class="p">,</span>
+            <span class="n">grad_w</span><span class="o">=</span><span class="n">grad_w</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="BetaNMF.get_gradient_mu_batch"><a class="viewcode-back" href="../doc.html#beta_nmf_minibatch.BetaNMF.get_gradient_mu_batch">[docs]</a>    <span class="k">def</span> <span class="nf">get_gradient_mu_batch</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;compile the theano based gradient functions for mu&quot;&quot;&quot;</span>
+        <span class="n">tbatch_ind</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">ivector</span><span class="p">(</span><span class="s1">&#39;batch_ind&#39;</span><span class="p">)</span>
+        <span class="n">tind</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">iscalar</span><span class="p">(</span><span class="s1">&#39;ind&#39;</span><span class="p">)</span>
+        <span class="n">grad_new</span> <span class="o">=</span> <span class="n">updates</span><span class="o">.</span><span class="n">gradient_w_mu</span><span class="p">(</span>
+                                    <span class="bp">self</span><span class="o">.</span><span class="n">x_cache1</span><span class="p">[</span><span class="n">tbatch_ind</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span><span class="n">tbatch_ind</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+                                                  <span class="p">],</span>
+                                    <span class="bp">self</span><span class="o">.</span><span class="n">w</span><span class="p">,</span>
+                                    <span class="bp">self</span><span class="o">.</span><span class="n">h_cache1</span><span class="p">[</span><span class="n">tbatch_ind</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span><span class="n">tbatch_ind</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+                                                  <span class="p">],</span>
+                                    <span class="bp">self</span><span class="o">.</span><span class="n">beta</span><span class="p">)</span>
+
+        <span class="n">grad_w</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">function</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">tbatch_ind</span><span class="p">],</span>
+                                 <span class="n">outputs</span><span class="o">=</span><span class="p">[],</span>
+                                 <span class="n">updates</span><span class="o">=</span><span class="p">{(</span><span class="bp">self</span><span class="o">.</span><span class="n">grad_w</span><span class="p">,</span>
+                                           <span class="bp">self</span><span class="o">.</span><span class="n">grad_w</span> <span class="o">+</span> <span class="n">grad_new</span><span class="p">)},</span>
+                                 <span class="n">name</span><span class="o">=</span><span class="s2">&quot;grad w&quot;</span><span class="p">,</span>
+                                 <span class="n">allow_input_downcast</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span>
+                                 <span class="n">on_unused_input</span><span class="o">=</span><span class="s1">&#39;ignore&#39;</span><span class="p">)</span>
+        <span class="n">grad_new</span> <span class="o">=</span> <span class="n">updates</span><span class="o">.</span><span class="n">gradient_h_mu</span><span class="p">(</span>
+                                    <span class="bp">self</span><span class="o">.</span><span class="n">x_cache1</span><span class="p">[</span><span class="n">tbatch_ind</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span><span class="n">tbatch_ind</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+                                                  <span class="p">],</span>
+                                    <span class="bp">self</span><span class="o">.</span><span class="n">w</span><span class="p">,</span>
+                                    <span class="bp">self</span><span class="o">.</span><span class="n">h_cache1</span><span class="p">[</span><span class="n">tbatch_ind</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span><span class="n">tbatch_ind</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+                                                  <span class="p">],</span>
+                                    <span class="bp">self</span><span class="o">.</span><span class="n">beta</span><span class="p">)</span>
+        <span class="n">grad_h</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">function</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">tbatch_ind</span><span class="p">],</span>
+                                 <span class="n">outputs</span><span class="o">=</span><span class="p">[],</span>
+                                 <span class="n">updates</span><span class="o">=</span><span class="p">{(</span><span class="bp">self</span><span class="o">.</span><span class="n">c1_grad_h</span><span class="p">,</span> <span class="n">grad_new</span><span class="p">)},</span>
+                                 <span class="n">name</span><span class="o">=</span><span class="s2">&quot;grad h&quot;</span><span class="p">,</span>
+                                 <span class="n">allow_input_downcast</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span>
+            <span class="n">grad_h</span><span class="o">=</span><span class="n">grad_h</span><span class="p">,</span>
+            <span class="n">grad_w</span><span class="o">=</span><span class="n">grad_w</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="BetaNMF.get_updates"><a class="viewcode-back" href="../doc.html#beta_nmf_minibatch.BetaNMF.get_updates">[docs]</a>    <span class="k">def</span> <span class="nf">get_updates</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;compile the theano based update functions&quot;&quot;&quot;</span>
+        <span class="n">tbatch_ind</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">ivector</span><span class="p">(</span><span class="s1">&#39;batch_ind&#39;</span><span class="p">)</span>
+        <span class="n">tneg</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">iscalar</span><span class="p">(</span><span class="s1">&#39;neg&#39;</span><span class="p">)</span>
+        <span class="n">tpos</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">iscalar</span><span class="p">(</span><span class="s1">&#39;pos&#39;</span><span class="p">)</span>
+        <span class="n">up_h</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">set_subtensor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">h_cache1</span><span class="p">[</span><span class="n">tbatch_ind</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span><span class="n">tbatch_ind</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="p">],</span>
+                               <span class="n">updates</span><span class="o">.</span><span class="n">mu_update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">h_cache1</span><span class="p">[</span>
+                                    <span class="n">tbatch_ind</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span><span class="n">tbatch_ind</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="p">],</span>
+                                    <span class="bp">self</span><span class="o">.</span><span class="n">c1_grad_h</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="p">],</span>
+                                    <span class="bp">self</span><span class="o">.</span><span class="n">c1_grad_h</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="p">]))</span>
+        <span class="n">train_h</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">function</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[</span><span class="n">tbatch_ind</span><span class="p">],</span>
+                                  <span class="n">outputs</span><span class="o">=</span><span class="p">[],</span>
+                                  <span class="n">updates</span><span class="o">=</span><span class="p">{(</span><span class="bp">self</span><span class="o">.</span><span class="n">h_cache1</span><span class="p">,</span> <span class="n">up_h</span><span class="p">)},</span>
+                                  <span class="n">name</span><span class="o">=</span><span class="s2">&quot;trainH&quot;</span><span class="p">,</span>
+                                  <span class="n">allow_input_downcast</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span>
+                                  <span class="n">on_unused_input</span><span class="o">=</span><span class="s1">&#39;ignore&#39;</span><span class="p">)</span>
+        <span class="n">update_w</span> <span class="o">=</span> <span class="n">updates</span><span class="o">.</span><span class="n">mu_update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">w</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">grad_w</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">grad_w</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+        <span class="n">train_w</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">function</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[],</span>
+                                  <span class="n">outputs</span><span class="o">=</span><span class="p">[],</span>
+                                  <span class="n">updates</span><span class="o">=</span><span class="p">{</span><span class="bp">self</span><span class="o">.</span><span class="n">w</span><span class="p">:</span> <span class="n">update_w</span><span class="p">},</span>
+                                  <span class="n">name</span><span class="o">=</span><span class="s2">&quot;trainW&quot;</span><span class="p">,</span>
+                                  <span class="n">allow_input_downcast</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span>
+            <span class="n">train_h</span><span class="o">=</span><span class="n">train_h</span><span class="p">,</span>
+            <span class="n">train_w</span><span class="o">=</span><span class="n">train_w</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="BetaNMF.set_params"><a class="viewcode-back" href="../doc.html#beta_nmf_minibatch.BetaNMF.set_params">[docs]</a>    <span class="k">def</span> <span class="nf">set_params</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">W</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">H</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Re-set theano based parameters according to the object attributes.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        W : array (optionnal)</span>
+<span class="sd">            Value for factor W when custom initialisation is used</span>
+
+<span class="sd">        H : array (optionnal)</span>
+<span class="sd">            Value for factor H when custom initialisation is used</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nb_batch</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">true_divide</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                                                   <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">batch_ind</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">nb_batch</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">))</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache1_size</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache1_size</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache1_size</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;cache1_size should be at &#39;</span>
+                                 <span class="s1">&#39;least equal to batch_size&#39;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cache1_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache1_size</span><span class="o">/</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">nb_cache1</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">true_divide</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                                                        <span class="bp">self</span><span class="o">.</span><span class="n">cache1_size</span><span class="p">)))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cache1_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">nb_cache1</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="k">print</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache1_size</span>
+        <span class="k">print</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">forget_factor</span> <span class="o">=</span> <span class="mf">1.</span><span class="o">/</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sag_memory</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">fact_</span> <span class="o">=</span> <span class="p">[</span><span class="n">base</span><span class="o">.</span><span class="n">nnrandn</span><span class="p">((</span><span class="n">dim</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_components</span><span class="p">))</span>
+                 <span class="k">for</span> <span class="n">dim</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_shape</span><span class="p">]</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">init</span> <span class="o">==</span> <span class="s1">&#39;custom&#39;</span><span class="p">:</span>
+            <span class="n">fact_</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">H</span>
+            <span class="n">fact_</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">W</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">w</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">fact_</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">theano</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">floatX</span><span class="p">),</span>
+                               <span class="n">name</span><span class="o">=</span><span class="s2">&quot;W&quot;</span><span class="p">,</span> <span class="n">borrow</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span> <span class="n">allow_downcast</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">h_cache1</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">fact_</span><span class="p">[</span><span class="mi">0</span><span class="p">][:</span><span class="bp">self</span><span class="o">.</span><span class="n">cache1_size</span><span class="p">,</span>
+                                               <span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">theano</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">floatX</span><span class="p">),</span>
+                                      <span class="n">name</span><span class="o">=</span><span class="s2">&quot;H cache1&quot;</span><span class="p">,</span> <span class="n">borrow</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span>
+                                      <span class="n">allow_downcast</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">factors_</span> <span class="o">=</span> <span class="n">fact_</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">x_cache1</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">cache1_size</span><span class="p">,</span>
+                                                <span class="bp">self</span><span class="o">.</span><span class="n">data_shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span>
+            <span class="n">theano</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">floatX</span><span class="p">),</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;X cache1&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">init</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="BetaNMF.init"><a class="viewcode-back" href="../doc.html#beta_nmf_minibatch.BetaNMF.init">[docs]</a>    <span class="k">def</span> <span class="nf">init</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Initialise theano variable to store the gradients&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">grad_w</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">2</span><span class="p">,</span>
+                      <span class="bp">self</span><span class="o">.</span><span class="n">data_shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+                      <span class="bp">self</span><span class="o">.</span><span class="n">n_components</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">theano</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">floatX</span><span class="p">),</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;gradW&quot;</span><span class="p">,</span> <span class="n">borrow</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span>
+            <span class="n">allow_downcast</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">grad_h</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">2</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_components</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">c1_grad_h</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">2</span><span class="p">,</span>
+                      <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
+                      <span class="bp">self</span><span class="o">.</span><span class="n">n_components</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">theano</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">floatX</span><span class="p">),</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;c1_gradH&quot;</span><span class="p">,</span> <span class="n">borrow</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span>
+            <span class="n">allow_downcast</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="BetaNMF.prepare_batch"><a class="viewcode-back" href="../doc.html#beta_nmf_minibatch.BetaNMF.prepare_batch">[docs]</a>    <span class="k">def</span> <span class="nf">prepare_batch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">randomize</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Arrange data for batches</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        randomize : boolean (default True)</span>
+<span class="sd">            Randomise the data (time-wise) before preparing batch indexes</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">ind</span> <span class="o">=</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">nb_batch</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="p">))</span>
+        <span class="n">ind</span><span class="p">[:</span><span class="bp">self</span><span class="o">.</span><span class="n">data_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">randomize</span><span class="p">:</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">shuffle</span><span class="p">(</span><span class="n">ind</span><span class="p">[:</span><span class="bp">self</span><span class="o">.</span><span class="n">data_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">batch_ind</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">ind</span><span class="p">,</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nb_batch</span><span class="p">,</span>
+                                          <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="BetaNMF.prepare_cache1"><a class="viewcode-back" href="../doc.html#beta_nmf_minibatch.BetaNMF.prepare_cache1">[docs]</a>    <span class="k">def</span> <span class="nf">prepare_cache1</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">randomize</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Arrange data for to fill cache1</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        randomize : boolean (default True)</span>
+<span class="sd">            Randomise the data (time-wise) before preparing cahce indexes</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">ind</span> <span class="o">=</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">nb_cache1</span> <span class="o">*</span>
+                         <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">true_divide</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cache1_size</span><span class="p">,</span>
+                                                    <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)))))</span>
+        <span class="n">ind</span><span class="p">[:</span><span class="bp">self</span><span class="o">.</span><span class="n">nb_batch</span><span class="p">,</span> <span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nb_batch</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">randomize</span><span class="p">:</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">shuffle</span><span class="p">(</span><span class="n">ind</span><span class="p">[:</span><span class="bp">self</span><span class="o">.</span><span class="n">nb_batch</span><span class="p">,</span> <span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cache1_ind</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">ind</span><span class="p">,</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nb_cache1</span><span class="p">,</span>
+                                           <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">true_divide</span><span class="p">(</span>
+                                                <span class="bp">self</span><span class="o">.</span><span class="n">cache1_size</span><span class="p">,</span>
+                                                <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)))</span>
+                                           <span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="BetaNMF.update_mu_sag"><a class="viewcode-back" href="../doc.html#beta_nmf_minibatch.BetaNMF.update_mu_sag">[docs]</a>    <span class="k">def</span> <span class="nf">update_mu_sag</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch_ind</span><span class="p">,</span> <span class="n">update_func</span><span class="p">,</span> <span class="n">grad_func</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Update current batch with SAG based algorithms</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch_ind : array with 2 elements</span>
+<span class="sd">            :batch_ind[0]: batch start</span>
+<span class="sd">            :batch_ind[1]: batch end</span>
+
+<span class="sd">        update_func : Theano compiled function</span>
+<span class="sd">            Update function</span>
+
+<span class="sd">        grad_func : Theano compiled function</span>
+<span class="sd">            Gradient function</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">grad_func</span><span class="p">[</span><span class="s1">&#39;grad_h&#39;</span><span class="p">](</span><span class="n">batch_ind</span><span class="p">)</span>
+        <span class="n">update_func</span><span class="p">[</span><span class="s1">&#39;train_h&#39;</span><span class="p">](</span><span class="n">batch_ind</span><span class="p">)</span>
+        <span class="n">grad_func</span><span class="p">[</span><span class="s1">&#39;grad_w&#39;</span><span class="p">](</span><span class="n">batch_ind</span><span class="p">)</span>
+        <span class="n">update_func</span><span class="p">[</span><span class="s1">&#39;train_w&#39;</span><span class="p">]()</span></div>
+
+<div class="viewcode-block" id="BetaNMF.update_mu_batch_h"><a class="viewcode-back" href="../doc.html#beta_nmf_minibatch.BetaNMF.update_mu_batch_h">[docs]</a>    <span class="k">def</span> <span class="nf">update_mu_batch_h</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch_ind</span><span class="p">,</span> <span class="n">update_func</span><span class="p">,</span> <span class="n">grad_func</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Update h for current batch with standard MU</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch_ind : array with 2 elements</span>
+<span class="sd">            :batch_ind[0]: batch start</span>
+<span class="sd">            :batch_ind[1]: batch end</span>
+
+<span class="sd">        update_func : Theano compiled function</span>
+<span class="sd">            Update function</span>
+
+<span class="sd">        grad_func : Theano compiled function</span>
+<span class="sd">            Gradient function</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">grad_func</span><span class="p">[</span><span class="s1">&#39;grad_h&#39;</span><span class="p">](</span><span class="n">batch_ind</span><span class="p">)</span>
+        <span class="n">update_func</span><span class="p">[</span><span class="s1">&#39;train_h&#39;</span><span class="p">](</span><span class="n">batch_ind</span><span class="p">)</span>
+        <span class="n">grad_func</span><span class="p">[</span><span class="s1">&#39;grad_w&#39;</span><span class="p">](</span><span class="n">batch_ind</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="BetaNMF.update_mu_batch_w"><a class="viewcode-back" href="../doc.html#beta_nmf_minibatch.BetaNMF.update_mu_batch_w">[docs]</a>    <span class="k">def</span> <span class="nf">update_mu_batch_w</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">udpate_func</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Update W with standard MU</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        update_func : Theano compiled function</span>
+<span class="sd">            Update function</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">udpate_func</span><span class="p">[</span><span class="s1">&#39;train_w&#39;</span><span class="p">]()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">grad_w</span><span class="o">.</span><span class="n">set_value</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">2</span><span class="p">,</span>
+                              <span class="bp">self</span><span class="o">.</span><span class="n">data_shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+                              <span class="bp">self</span><span class="o">.</span><span class="n">n_components</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">theano</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">floatX</span><span class="p">))</span></div></div>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../index.html">Beta NMF with mini-batch updates 1.0 documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="index.html" >Module code</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &copy; Copyright 2016, Romain Serizel.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.1.
+    </div>
+  </body>
+</html>

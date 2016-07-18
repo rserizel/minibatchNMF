@@ -1,0 +1,345 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Mini-batch multiplicative updates for NMF with \(\beta\) -divergence &mdash; Beta NMF with mini-batch updates 1.0 documentation</title>
+    
+    <link rel="stylesheet" href="_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="Beta NMF with mini-batch updates 1.0 documentation" href="index.html" />
+    <link rel="next" title="Documentation" href="doc.html" />
+    <link rel="prev" title="Beta NMF with mini-batch updates" href="index.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="doc.html" title="Documentation"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="index.html" title="Beta NMF with mini-batch updates"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">Beta NMF with mini-batch updates 1.0 documentation</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="mini-batch-multiplicative-updates-for-nmf-with-divergence">
+<h1>Mini-batch multiplicative updates for NMF with  <span class="math">\(\beta\)</span> -divergence<a class="headerlink" href="#mini-batch-multiplicative-updates-for-nmf-with-divergence" title="Permalink to this headline">¶</a></h1>
+<p>In <a class="footnote-reference" href="#id21" id="id1">[1]</a> we propose mini-batch stochastic algorithms to perform NMF efficiently on large data matrices. Besides the stochastic aspect, the mini-batch approach allows exploiting intesive computing devices such as general
+purpose graphical processing units to decrease the processing time further and in some cases outperform coordinate descent approach.</p>
+<div class="section" id="nmf-with-divergence-and-multiplicative-updates">
+<h2>NMF with <span class="math">\(\beta\)</span> -divergence and multiplicative updates<a class="headerlink" href="#nmf-with-divergence-and-multiplicative-updates" title="Permalink to this headline">¶</a></h2>
+<p>Consider the (nonnegative) matrix <span class="math">\(\textbf{V}\in\mathbb{R}_+^{F\times N}\)</span>. The goal of NMF <a class="footnote-reference" href="#id22" id="id2">[2]</a> is to find a factorisation for <span class="math">\(\textbf{V}\)</span> of the form:</p>
+<div class="math" id="equation-nmf">
+<span class="eqno">(1)</span>\[\textbf{V} \approx \textbf{W}\textbf{H}\]</div>
+<p>where <span class="math">\(\textbf{W}\in\mathbb{R}_+^{F\times K}\)</span> , <span class="math">\(\textbf{H}\in\mathbb{R}_+^{K\times N}\)</span> and <span class="math">\(K\)</span> is the number of components in the decomposition. The NMF model estimation is usually considered as solving the following optimisation problem:</p>
+<div class="math">
+\[\min_{\textbf{W}\textbf{H}}D(\textbf{V} | \textbf{W}\textbf{H})\quad\mathrm{s.t.}\quad\textbf{W}\geq 0,\ \textbf{H}\geq 0\mathrm{.}\]</div>
+<p>Where <span class="math">\(D\)</span> is a separable divergence such as:</p>
+<div class="math">
+\[D(\textbf{V}|\textbf{W}\textbf{H}) = \sum\limits_{f=1}^{F}\sum\limits_{n=1}^{N}d([\textbf{V}]_{fn}|[\textbf{WH}]_{fn})\textrm{,}\]</div>
+<p>with <span class="math">\([.]_{fn}\)</span> is the element on column <span class="math">\(n\)</span> and line <span class="math">\(f\)</span> of a matrix and <span class="math">\(d\)</span> is a scalar cost function. A common choice for the cost function is the <span class="math">\(\beta\)</span> -divergence <a class="footnote-reference" href="#id23" id="id3">[3]</a>  <a class="footnote-reference" href="#id24" id="id4">[4]</a> <a class="footnote-reference" href="#id25" id="id5">[5]</a> defined as follows:</p>
+<div class="math" id="equation-div">
+<span class="eqno">(2)</span>\[\begin{split}d_{\beta}(x|y)\triangleq
+\begin{cases}
+\frac{1}{\beta(\beta -1)} (x^{\beta} + (\beta -1)y^{\beta} - \beta xy^{(\beta-1)})&amp;\beta\in\mathbb{R}\backslash\{0,1\}\nonumber\\
+x\log\frac{x}{y} - x + y&amp;\beta=1\nonumber\\
+\frac{x}{y} -\log\frac{x}{y} - 1&amp;\beta=0\nonumber\textrm{.}
+\end{cases}\end{split}\]</div>
+<p>Popular cost functions such as the Euclidean distance, the generalised KL divergence <a class="footnote-reference" href="#id26" id="id6">[6]</a> and the IS divergence <a class="footnote-reference" href="#id27" id="id7">[7]</a> and all particular cases of the <span class="math">\(\beta\)</span>-divergence` (obtained for <span class="math">\(\beta=2\)</span> , <span class="math">\(1\)</span> and <span class="math">\(0\)</span>, respectively). The use of the <span class="math">\(\beta\)</span> -divergence for NMF has been studied extensively in Févotte et al. <a class="footnote-reference" href="#id28" id="id8">[8]</a>.  In most cases NMF problem is solved using a two-block coordinate descent approach. Each of the factors <span class="math">\(\textbf{W}\)</span> and <span class="math">\(\textbf{H}\)</span> is optimised alternatively. The sub-problem in one factor can then be considered as a nonnegative least square problem (NNLS) <a class="footnote-reference" href="#id29" id="id9">[9]</a>. The approach implemented here to solve these NNLS problems relies on the multiplicative update rules introduced in Lee et al. <a class="footnote-reference" href="#id22" id="id10">[2]</a> for the Euclidean distance and later generalised to the the <span class="math">\(\beta\)</span> -divergence <a class="footnote-reference" href="#id29" id="id11">[9]</a> :</p>
+<div class="math" id="equation-upH">
+<span class="eqno">(3)</span>\[\textbf{H}\gets \textbf{H}\odot\frac{\textbf{W}^T\left[(\textbf{W}\textbf{H})^{\beta-2}\odot\textbf{V}\right]}
+{\textbf{W}^T(\textbf{W}\textbf{H})^{\beta-1}}\]</div>
+<div class="math" id="equation-upW">
+<span class="eqno">(4)</span>\[\textbf{W}\gets \textbf{W}\odot\frac{\left[(\textbf{W}\textbf{H})^{\beta-2}\odot\textbf{V}\right]\textbf{H}^T }
+{(\textbf{W}\textbf{H})^{\beta-1}\textbf{H}^T}\mathrm{;}\]</div>
+<p>where <span class="math">\(\odot\)</span> is the element-wise product (Hadamard product) and division and power are element-wise. The matrices <span class="math">\(\textbf{H}\)</span> and <span class="math">\(\textbf{W}\)</span> are then updated according to an alternating update scheme.</p>
+</div>
+<div class="section" id="mini-batch-multiplicative-updates-for-nmf">
+<h2>Mini-batch multiplicative updates for NMF<a class="headerlink" href="#mini-batch-multiplicative-updates-for-nmf" title="Permalink to this headline">¶</a></h2>
+<p>The standard update scheme requires the complete matrix <span class="math">\(\textbf{V}\)</span>. When considering time series with a large number of data points(or time series that are expending in time) running this algorithm can become prohibitive. Capitalising on the separability of the divergence <a href="#equation-div">(2)</a> it is possible to perform NMF on mini-batch of data to reduce to computational burden of to allow for parallel computations <a class="footnote-reference" href="#id30" id="id12">[10]</a>.</p>
+<p>When considering time series as defined above, each column (<span class="math">\(V_i\)</span>) of the matrix <span class="math">\(\textbf{V}\)</span> contain all the features for a specific time frame and each row represent a particular feature along time. The number of row is then a parameter of the low-level representation and only the number of columns can increase while increasing the amount of data. Therefore, in contrast to the approach proposed by Simsekli <em>et al.</em> <a class="footnote-reference" href="#id30" id="id13">[10]</a> we decide to decompose the matrix <span class="math">\(\textbf{V}\)</span> in <span class="math">\(B\)</span> mini-batches of time frames that contains all the features for the given frame.</p>
+<div class="figure align-center" id="id35">
+<img alt="_images/batch.png" src="_images/batch.png" />
+<p class="caption"><span class="caption-text"><strong>Fig. 1</strong> Mini-batch decomposition of the data matrix <span class="math">\(\textbf{V}\)</span></span></p>
+</div>
+<p>For each batch <span class="math">\(b\)</span>, the update of the activations <span class="math">\(\textbf{H}_b\)</span> corresponding to <span class="math">\(\textbf{V}_b\)</span> can be obtained independently from all the other batches with the standard MU~eqref{upH}. The update of the bases <span class="math">\(\textbf{W}\)</span> on the other hand require the whole matrix <span class="math">\(\textbf{V}\)</span> to be processed. The positive contribution of the gradient (<cite>nabla^+textbf{W}</cite>) and the negative contribution of the gradient <span class="math">\(\nabla^-\textbf{W}\)</span> are accumulated along the mini-batches. <span class="math">\(\textbf{W}\)</span> is updated once per epoch with the standard MU rule <a href="#equation-upW">(4)</a> as described in Algorithm <a class="footnote-reference" href="#id21" id="id14">[1]</a>. Note that this is theoretically similar to the standard full-gradient (FG) MU rules.</p>
+</div>
+<div class="section" id="stochastic-mini-batch-updates">
+<h2>Stochastic mini-batch updates<a class="headerlink" href="#stochastic-mini-batch-updates" title="Permalink to this headline">¶</a></h2>
+<p>label{stoMB}
+When aiming at minimizing an Euclidean distance, it has been shown than drawing samples randomly can improve greatly the convergence speed in dictionary learning and by extension in NMF <a class="footnote-reference" href="#id31" id="id15">[11]</a> <a class="footnote-reference" href="#id32" id="id16">[12]</a>. We propose to apply a similar idea to MU in order to take advantage of the wide variety of divergences covered by the <span class="math">\(\beta\)</span>-divergence. Instead of selecting the mini-batch sequentially on the original data <span class="math">\(\textbf{V}\)</span> as above, we propose to draw mini-batches randomly on a shuffled version of <span class="math">\(\textbf{V}\)</span>. The mini-batch update of <span class="math">\(\textbf{H}\)</span> still need one full pass through the data but a single mini-batch can be used to update <span class="math">\(\textbf{W}\)</span>, in an way analogous to stochastic gradient (SG) methods <a class="footnote-reference" href="#id33" id="id17">[13]</a>.</p>
+<p>Two different strategies can be considered to updates <span class="math">\(\textbf{W}\)</span>. The first option is to updates <span class="math">\(\textbf{W}\)</span> for each mini-batch, this approach is denoted asymmetric SG mini-batch MU (ASG-MU) as <span class="math">\(\textbf{H}\)</span> and <span class="math">\(\textbf{W}\)</span> are updated asymmetrically (the full <span class="math">\(\textbf{H}\)</span> is updated once per epoch while <span class="math">\(\textbf{W}\)</span> is updated for each mini-batch). The second option is to update <span class="math">\(\textbf{W}\)</span> only once per epoch on a randomly selected mini-batch a described this approach will be referred to as greedy SG mini-batch MU (GSG-MU). Detailled description of the algorithm can be found in <a class="footnote-reference" href="#id21" id="id18">[1]</a></p>
+</div>
+<div class="section" id="stochastic-average-gradient-mini-batch-updates">
+<h2>Stochastic average gradient mini-batch updates<a class="headerlink" href="#stochastic-average-gradient-mini-batch-updates" title="Permalink to this headline">¶</a></h2>
+<p>Stochastic average gradient (SAG) <a class="footnote-reference" href="#id34" id="id19">[14]</a> is a method recently introduced for optimizing cost functions that are a sum of convex functions (which is the case here). SAG provide an intermediate between FG-like methods and SG-like methods. SAG then allows to maintain convergence rate close to FG methods with a complexity comparable to SG methods.</p>
+<p>We propose to apply SAG-like method to update the dictionaries <span class="math">\(\textbf{W}\)</span> in a mini-batch based NMF. Note that, as the full pass through the data is needed to update <span class="math">\(\textbf{H}\)</span> it would not make sense to apply SAG here. The key idea is that for each mini-batch <span class="math">\(b\)</span> instead of using the gradient computed locally to update <span class="math">\(\textbf{W}\)</span>, we propose to use the mini-batch data to update the full gradient negative and positive contributions:</p>
+<div class="math">
+\[\begin{split}\begin{align}
+\nabla^-\textbf{W}&amp;\gets\nabla^-\textbf{W} - \nabla^-_{\mathrm{old}}\textbf{W}_b + \nabla^-_{\mathrm{new}}\textbf{W}_b\\
+\nabla^+\textbf{W}&amp;\gets\nabla^+\textbf{W} - \nabla^+_{\mathrm{old}}\textbf{W}_b + \nabla^+_{\mathrm{new}}\textbf{W}_b
+\end{align}\end{split}\]</div>
+<p>where <span class="math">\(\nabla^-_{\mathrm{new}}\textbf{W}_b\)</span> and <span class="math">\(\nabla^+_{\mathrm{new}}\textbf{W}_b\)</span> are the negative and positive contribution to the gradient of <span class="math">\(\textbf{W}\)</span> calculated on the mini-batch <span class="math">\(b\)</span>, respectively. <span class="math">\(\nabla^-_{\mathrm{old}}\textbf{W}_b\)</span> and <span class="math">\(\nabla^+_{\mathrm{old}}\textbf{W}_b\)</span> are the previous negative and positive contribution to the gradient of <span class="math">\(\textbf{W}\)</span> for the mini-batch <span class="math">\(b\)</span>, respectively.</p>
+<p>Similarly as above, two different strategies can be considered to updates <span class="math">\(\textbf{W}\)</span>. The first option is to updates <span class="math">\(\textbf{W}\)</span> for each mini-batch this approach is denoted asymmetric SAG mini-batch MU (ASAG-MU). The second option is to update <span class="math">\(\textbf{W}\)</span> only once per epoch on a randomly selected mini-batch which is greedy SAG mini-batch MU (GSAG-MU). Detailled description of the algorithm can be found in <a class="footnote-reference" href="#id21" id="id20">[1]</a></p>
+</div>
+<div class="section" id="download">
+<h2>Download<a class="headerlink" href="#download" title="Permalink to this headline">¶</a></h2>
+<p>Source code available at <a class="reference external" href="https://github.com/rserizel/groupNMF">https://github.com/rserizel/groupNMF</a></p>
+</div>
+<div class="section" id="citation">
+<h2>Citation<a class="headerlink" href="#citation" title="Permalink to this headline">¶</a></h2>
+<p>If you are using this source code please consider citing the following paper:</p>
+<div class="topic">
+<p class="topic-title first">Reference</p>
+<ol class="upperalpha simple" start="18">
+<li>Serizel, S. Essid, and G. Richard. “Mini-batch stochastic approaches for accelerated multiplicative updates in nonnegative matrix factorisation with beta-divergence”. Accepted for publication In <em>Proc. of MLSP</em>, p. 5, 2016.</li>
+</ol>
+</div>
+<div class="topic">
+<p class="topic-title first">Bibtex</p>
+<p>&#64;inproceedings{serizel2016batch,</p>
+<p>title={Mini-batch stochastic approaches for accelerated multiplicative updates in nonnegative matrix factorisation with beta-divergence},</p>
+<p>author={Serizel, Romain and Essid, Slim and Richard, Ga{&#8220;e}l},</p>
+<p>booktitle={IEEE International Workshop on Machine Learning for Signal Processing (MLSP)},</p>
+<p>pages={5},</p>
+<p>year={2016},</p>
+<p>organization={IEEE}
+}</p>
+</div>
+</div>
+<div class="section" id="references">
+<h2>References<a class="headerlink" href="#references" title="Permalink to this headline">¶</a></h2>
+<table class="docutils footnote" frame="void" id="id21" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label">[1]</td><td><ol class="first last upperalpha simple" start="18">
+<li>Serizel, S. Essid, and G. Richard. “Mini-batch stochastic approaches for accelerated multiplicative updates in nonnegative matrix factorisation with beta-divergence”. Accepted for publication In <em>Proc. of MLSP</em>, p. 5, 2016.</li>
+</ol>
+</td></tr>
+</tbody>
+</table>
+<table class="docutils footnote" frame="void" id="id22" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label">[2]</td><td><ol class="first last upperalpha simple" start="4">
+<li><ol class="first upperalpha" start="4">
+<li>Lee and H. S. Seung, “Learning the parts of objects by non-negative matrix factorization.,” <em>Nature</em>, vol. 401, no. 6755, pp. 788–791, 1999.</li>
+</ol>
+</li>
+</ol>
+</td></tr>
+</tbody>
+</table>
+<table class="docutils footnote" frame="void" id="id23" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label">[3]</td><td><ol class="first last upperalpha simple">
+<li>Basu, I. R. Harris, N. L. Hjort, and M. C. Jones, “Robust and efficient estimation by minimising a density power divergence,” <em>Biometrika</em>, vol. 85, no. 3, pp. 549–559, 1998.</li>
+</ol>
+</td></tr>
+</tbody>
+</table>
+<table class="docutils footnote" frame="void" id="id24" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label">[4]</td><td><ol class="first last upperalpha simple">
+<li>Cichocki and S. Amari, “Families of alpha-beta-and gamma-divergences: Flexible and robust measures of similarities,” <em>Entropy</em>, vol. 12, no. 6, pp. 1532–1568, 2010.</li>
+</ol>
+</td></tr>
+</tbody>
+</table>
+<table class="docutils footnote" frame="void" id="id25" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label">[5]</td><td><ol class="first last upperalpha simple" start="19">
+<li>Eguchi and Y. Kano, “Robustifing maximum likelihood estimation,” Research Memo 802, Institute of Statistical Mathematics, June 2001.</li>
+</ol>
+</td></tr>
+</tbody>
+</table>
+<table class="docutils footnote" frame="void" id="id26" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label">[6]</td><td><ol class="first last upperalpha simple" start="19">
+<li>Kullback and R. A. Leibler, “On information and sufficiency,” <em>The annals of mathematical statistics</em>, pp. 79–86, 1951.</li>
+</ol>
+</td></tr>
+</tbody>
+</table>
+<table class="docutils footnote" frame="void" id="id27" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label">[7]</td><td><ol class="first last upperalpha simple" start="6">
+<li>Itakura, “Minimum prediction residual principle applied to speech recognition,” <em>IEEE Transactions on Acoustics, Speech and Signal Processing</em>, vol. 23, no. 1, pp. 67–72, 1975.</li>
+</ol>
+</td></tr>
+</tbody>
+</table>
+<table class="docutils footnote" frame="void" id="id28" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label">[8]</td><td><ol class="first last upperalpha simple" start="3">
+<li>Févotte and J. Idier, “Algorithms for nonnegative matrix factorization with the beta-divergence,” <em>Neural Computation</em>, vol. 23, no. 9, pp. 2421–2456, 2011.</li>
+</ol>
+</td></tr>
+</tbody>
+</table>
+<table class="docutils footnote" frame="void" id="id29" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label">[9]</td><td><ol class="first last upperalpha simple" start="14">
+<li>Gillis, “The why and how of nonnegative matrix factorization,” in <em>Regularization, Optimization, Kernels, and Support Vector Machines</em>, M. Signoretto J.A.K. Suykens and A. Argyriou, Eds., Machine Learning and Pattern Recognition Series, pp. 257 – 291. Chapman &amp; Hall/CRC, 2014.</li>
+</ol>
+</td></tr>
+</tbody>
+</table>
+<table class="docutils footnote" frame="void" id="id30" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label">[10]</td><td><ol class="first last upperalpha simple" start="21">
+<li>Simsekli, H. Koptagel, H. Guldas¸, A. Taylan Cemgil, F. Oztoprak, and S. Ilker Birbil, “Parallel Stochastic Gradient Markov Chain Monte Carlo for Matrix Factorisation Models,” <em>ArXiv e-prints</em>, June 2015.</li>
+</ol>
+</td></tr>
+</tbody>
+</table>
+<table class="docutils footnote" frame="void" id="id31" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label">[11]</td><td><ol class="first last upperalpha simple" start="6">
+<li>Mairal, J.and Bach, J. Ponce, and G. Sapiro, “Online learning for matrix factorization and sparse coding,” <em>The Journal of Machine Learning Research</em>, vol. 11, pp. 19–60, 2010.</li>
+</ol>
+</td></tr>
+</tbody>
+</table>
+<table class="docutils footnote" frame="void" id="id32" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label">[12]</td><td><ol class="first last upperalpha simple">
+<li>Mensch, J. Mairal, B. Thirion, and G. Varoquaux, “Dictionary Learning for Massive Matrix Factorization,” in Proc. of <em>ICML</em>, 2016.</li>
+</ol>
+</td></tr>
+</tbody>
+</table>
+<table class="docutils footnote" frame="void" id="id33" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label">[13]</td><td><ol class="first last upperalpha simple" start="12">
+<li>Bottou, “Online learning and stochastic approximations,” <em>On-line learning</em> in neural networks, vol. 17, no. 9, pp. 142.</li>
+</ol>
+</td></tr>
+</tbody>
+</table>
+<table class="docutils footnote" frame="void" id="id34" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label">[14]</td><td><ol class="first last upperalpha simple" start="13">
+<li>Schmidt, N. Le Roux, and F. Bach, “Minimizing Finite Sums with the Stochastic Average Gradient,” <em>ArXiv e-prints</em>, Sept. 2013.</li>
+</ol>
+</td></tr>
+</tbody>
+</table>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Mini-batch multiplicative updates for NMF with  <span class="math">\(\beta\)</span> -divergence</a><ul>
+<li><a class="reference internal" href="#nmf-with-divergence-and-multiplicative-updates">NMF with <span class="math">\(\beta\)</span> -divergence and multiplicative updates</a></li>
+<li><a class="reference internal" href="#mini-batch-multiplicative-updates-for-nmf">Mini-batch multiplicative updates for NMF</a></li>
+<li><a class="reference internal" href="#stochastic-mini-batch-updates">Stochastic mini-batch updates</a></li>
+<li><a class="reference internal" href="#stochastic-average-gradient-mini-batch-updates">Stochastic average gradient mini-batch updates</a></li>
+<li><a class="reference internal" href="#download">Download</a></li>
+<li><a class="reference internal" href="#citation">Citation</a></li>
+<li><a class="reference internal" href="#references">References</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="index.html"
+                        title="previous chapter">Beta NMF with mini-batch updates</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="doc.html"
+                        title="next chapter">Documentation</a></p>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/intro.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="doc.html" title="Documentation"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="index.html" title="Beta NMF with mini-batch updates"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">Beta NMF with mini-batch updates 1.0 documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &copy; Copyright 2016, Romain Serizel.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.1.
+    </div>
+  </body>
+</html>

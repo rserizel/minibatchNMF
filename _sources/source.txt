@@ -1,0 +1,28 @@
+Download
+--------
+
+Source code available at https://github.com/rserizel/minibatchNMF
+
+If you are using this source code please consider citing the following paper: 
+
+.. topic:: Reference
+
+	R. Serizel, S. Essid, and G. Richard. “Mini-batch stochastic approaches for accelerated multiplicative updates in nonnegative matrix factorisation with beta-divergence”. Accepted for publication In *Proc. of MLSP*, p. 5, 2016.
+
+
+.. topic:: Bibtex
+
+	@inproceedings{serizel2016batch,
+
+  	title={Mini-batch stochastic approaches for accelerated multiplicative updates in nonnegative matrix factorisation with beta-divergence},
+
+  	author={Serizel, Romain and Essid, Slim and Richard, Ga{\"e}l},
+
+  	booktitle={IEEE International Workshop on Machine Learning for Signal Processing (MLSP)},
+
+  	pages={5},
+
+  	year={2016},
+
+  	organization={IEEE}
+	}

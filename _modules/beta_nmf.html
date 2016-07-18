@@ -1,0 +1,274 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>beta_nmf &mdash; Beta NMF with mini-batch updates 1.0 documentation</title>
+    
+    <link rel="stylesheet" href="../_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="Beta NMF with mini-batch updates 1.0 documentation" href="../index.html" />
+    <link rel="up" title="Module code" href="index.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../index.html">Beta NMF with mini-batch updates 1.0 documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="index.html" accesskey="U">Module code</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for beta_nmf</h1><div class="highlight"><pre>
+<span></span><span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">beta\_nmf.py</span>
+<span class="sd">~~~~~~~~~~~</span>
+
+<span class="sd">.. topic:: Contents</span>
+
+<span class="sd">  The beta_nmf module includes the beta\_nmf class,</span>
+<span class="sd">  fit function and theano functions to compute updates and cost.&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">theano</span>
+<span class="kn">import</span> <span class="nn">base</span>
+<span class="kn">import</span> <span class="nn">updates</span>
+<span class="kn">import</span> <span class="nn">costs</span>
+
+
+<div class="viewcode-block" id="BetaNMF"><a class="viewcode-back" href="../doc.html#beta_nmf.BetaNMF">[docs]</a><span class="k">class</span> <span class="nc">BetaNMF</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;BetaNMF class</span>
+
+<span class="sd">    Performs nonnegative matrix factorization with Theano.</span>
+<span class="sd">    L1-sparsity and group sparsity constraints can be applied on activations.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    data_shape : tuple composed of integers</span>
+<span class="sd">        the shape of the data to approximate</span>
+
+<span class="sd">    n_components : positive integer (default 50)</span>
+<span class="sd">        the number of latent components for the NMF model</span>
+
+<span class="sd">    beta : arbitrary float (default 2)</span>
+<span class="sd">        the beta-divergence to consider, particular cases of interest are</span>
+<span class="sd">         * beta=2 : Euclidean distance</span>
+<span class="sd">         * beta=1 : Kullback Leibler</span>
+<span class="sd">         * beta=0 : Itakura-Saito</span>
+
+<span class="sd">    n_iter : Positive integer (default 100)</span>
+<span class="sd">        number of iterations</span>
+
+<span class="sd">    fixed_factors : array (default Null)</span>
+<span class="sd">        list of factors that are not updated</span>
+<span class="sd">            e.g. fixed_factors = [0] -&gt; H is not updated</span>
+
+<span class="sd">            fixed_factors = [1] -&gt; W is not updated</span>
+
+<span class="sd">    l_sparse : Float (default 0.)</span>
+<span class="sd">        sparsity constraint</span>
+
+<span class="sd">    sparse_idx : Array</span>
+<span class="sd">        boundaries of the groups for group sparisty [start, stop]</span>
+
+<span class="sd">    verbose : Integer</span>
+<span class="sd">        the frequence at which the score should be computed and displayed</span>
+<span class="sd">        (number of iterations between each computation)</span>
+
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    factors : list of arrays</span>
+
+<span class="sd">        The estimated factors (factors[0] = H)&quot;&quot;&quot;</span>
+
+    <span class="c1"># Constructor</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data_shape</span><span class="p">,</span> <span class="n">n_components</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">beta</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">n_iter</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+                 <span class="n">fixed_factors</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                 <span class="n">l_sparse</span><span class="o">=</span><span class="mf">0.</span><span class="p">,</span> <span class="n">sparse_idx</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">data_shape</span> <span class="o">=</span> <span class="n">data_shape</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_components</span> <span class="o">=</span> <span class="n">n_components</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_components</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">n_components</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s1">&#39;int32&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">beta</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">beta</span><span class="p">,</span> <span class="n">theano</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">floatX</span><span class="p">),</span>
+                                  <span class="n">name</span><span class="o">=</span><span class="s2">&quot;beta&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span> <span class="o">=</span> <span class="n">verbose</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_iter</span> <span class="o">=</span> <span class="n">n_iter</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scores</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="n">fixed_factors</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">fixed_factors</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fixed_factors</span> <span class="o">=</span> <span class="n">fixed_factors</span>
+        <span class="n">fact_</span> <span class="o">=</span> <span class="p">[</span><span class="n">base</span><span class="o">.</span><span class="n">nnrandn</span><span class="p">((</span><span class="n">dim</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_components</span><span class="p">))</span> <span class="k">for</span> <span class="n">dim</span> <span class="ow">in</span> <span class="n">data_shape</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">w</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">fact_</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">theano</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">floatX</span><span class="p">),</span>
+                               <span class="n">name</span><span class="o">=</span><span class="s2">&quot;W&quot;</span><span class="p">,</span> <span class="n">borrow</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span> <span class="n">allow_downcast</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">h</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">fact_</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">theano</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">floatX</span><span class="p">),</span>
+                               <span class="n">name</span><span class="o">=</span><span class="s2">&quot;H&quot;</span><span class="p">,</span> <span class="n">borrow</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span> <span class="n">allow_downcast</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">factors</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">h</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">w</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">x</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span>
+          <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">data_shape</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">theano</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">floatX</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;X&quot;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">l_sparse</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">l_sparse</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;l_sparse&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">l_sparse</span><span class="o">.</span><span class="n">get_value</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">sparse_idx</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">sparse_idx</span> <span class="o">=</span> <span class="bp">None</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">sparse_idx</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span>
+                    <span class="n">sparse_idx</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;sparse_idx&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">get_updates_functions</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">get_div_function</span><span class="p">()</span>
+
+<div class="viewcode-block" id="BetaNMF.fit"><a class="viewcode-back" href="../doc.html#beta_nmf.BetaNMF.fit">[docs]</a>    <span class="k">def</span> <span class="nf">fit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Learns NMF model</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        X : ndarray with nonnegative entries</span>
+<span class="sd">            The input array</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="o">.</span><span class="n">set_value</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">theano</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">floatX</span><span class="p">))</span>
+
+        <span class="k">print</span> <span class="s1">&#39;Fitting NMF model with </span><span class="si">%d</span><span class="s1"> iterations....&#39;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_iter</span>
+
+        <span class="c1"># main loop</span>
+        <span class="k">for</span> <span class="n">it</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_iter</span><span class="p">):</span>
+            <span class="k">if</span> <span class="s1">&#39;tick&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="nb">locals</span><span class="p">():</span>
+                <span class="n">tick</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">it</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">score</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">score</span><span class="p">()</span>
+                    <span class="k">print</span> <span class="p">(</span><span class="s1">&#39;Iteration </span><span class="si">%d</span><span class="s1"> / </span><span class="si">%d</span><span class="s1">, duration=</span><span class="si">%.1f</span><span class="s1">ms, cost=</span><span class="si">%f</span><span class="s1">&#39;</span>
+                           <span class="o">%</span> <span class="p">(</span><span class="n">it</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_iter</span><span class="p">,</span> <span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">tick</span><span class="p">)</span> <span class="o">*</span> <span class="mi">1000</span><span class="p">,</span>
+                              <span class="n">score</span><span class="p">))</span>
+            <span class="k">if</span> <span class="mi">1</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">fixed_factors</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">train_w</span><span class="p">()</span>
+            <span class="k">if</span> <span class="mi">0</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">fixed_factors</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">train_h</span><span class="p">()</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">if</span> <span class="p">(</span><span class="n">it</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">score</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">score</span><span class="p">()</span>
+                    <span class="k">print</span> <span class="p">(</span><span class="s1">&#39;Iteration </span><span class="si">%d</span><span class="s1"> / </span><span class="si">%d</span><span class="s1">, duration=</span><span class="si">%.1f</span><span class="s1">ms, cost=</span><span class="si">%f</span><span class="s1">&#39;</span>
+                           <span class="o">%</span> <span class="p">(</span><span class="n">it</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_iter</span><span class="p">,</span> <span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">tick</span><span class="p">)</span> <span class="o">*</span> <span class="mi">1000</span><span class="p">,</span>
+                              <span class="n">score</span><span class="p">))</span>
+                    <span class="n">tick</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+        <span class="k">print</span> <span class="s1">&#39;Done.&#39;</span></div>
+
+<div class="viewcode-block" id="BetaNMF.get_div_function"><a class="viewcode-back" href="../doc.html#beta_nmf.BetaNMF.get_div_function">[docs]</a>    <span class="k">def</span> <span class="nf">get_div_function</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Compile the theano-based divergence function&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">div</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">function</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[],</span>
+                                   <span class="n">outputs</span><span class="o">=</span><span class="n">costs</span><span class="o">.</span><span class="n">beta_div</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="p">,</span>
+                                                          <span class="bp">self</span><span class="o">.</span><span class="n">w</span><span class="o">.</span><span class="n">T</span><span class="p">,</span>
+                                                          <span class="bp">self</span><span class="o">.</span><span class="n">h</span><span class="p">,</span>
+                                                          <span class="bp">self</span><span class="o">.</span><span class="n">beta</span><span class="p">),</span>
+                                   <span class="n">name</span><span class="o">=</span><span class="s2">&quot;div&quot;</span><span class="p">,</span>
+                                   <span class="n">allow_input_downcast</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="BetaNMF.get_updates_functions"><a class="viewcode-back" href="../doc.html#beta_nmf.BetaNMF.get_updates_functions">[docs]</a>    <span class="k">def</span> <span class="nf">get_updates_functions</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Compile the theano based update functions&quot;&quot;&quot;</span>
+        <span class="k">print</span> <span class="s2">&quot;Standard rules for beta-divergence&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">l_sparse</span><span class="o">.</span><span class="n">get_value</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">h_update</span> <span class="o">=</span> <span class="n">updates</span><span class="o">.</span><span class="n">beta_H</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">w</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">h</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">beta</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sparse_idx</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+                <span class="n">h_update</span> <span class="o">=</span> <span class="n">updates</span><span class="o">.</span><span class="n">beta_H_Sparse</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="p">,</span>
+                                                 <span class="bp">self</span><span class="o">.</span><span class="n">w</span><span class="p">,</span>
+                                                 <span class="bp">self</span><span class="o">.</span><span class="n">h</span><span class="p">,</span>
+                                                 <span class="bp">self</span><span class="o">.</span><span class="n">beta</span><span class="p">,</span>
+                                                 <span class="bp">self</span><span class="o">.</span><span class="n">l_sparse</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">h_update</span> <span class="o">=</span> <span class="n">updates</span><span class="o">.</span><span class="n">beta_H_groupSparse</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="p">,</span>
+                                                      <span class="bp">self</span><span class="o">.</span><span class="n">w</span><span class="p">,</span>
+                                                      <span class="bp">self</span><span class="o">.</span><span class="n">h</span><span class="p">,</span>
+                                                      <span class="bp">self</span><span class="o">.</span><span class="n">beta</span><span class="p">,</span>
+                                                      <span class="bp">self</span><span class="o">.</span><span class="n">l_sparse</span><span class="p">,</span>
+                                                      <span class="bp">self</span><span class="o">.</span><span class="n">sparse_idx</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="p">],</span>
+                                                      <span class="bp">self</span><span class="o">.</span><span class="n">sparse_idx</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="p">])</span>
+        <span class="n">w_update</span> <span class="o">=</span> <span class="n">updates</span><span class="o">.</span><span class="n">beta_W</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">w</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">h</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">beta</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">train_h</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">function</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[],</span>
+                                       <span class="n">outputs</span><span class="o">=</span><span class="p">[],</span>
+                                       <span class="n">updates</span><span class="o">=</span><span class="p">{</span><span class="bp">self</span><span class="o">.</span><span class="n">h</span><span class="p">:</span> <span class="n">h_update</span><span class="p">},</span>
+                                       <span class="n">name</span><span class="o">=</span><span class="s2">&quot;trainH&quot;</span><span class="p">,</span>
+                                       <span class="n">allow_input_downcast</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">train_w</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">function</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">[],</span>
+                                       <span class="n">outputs</span><span class="o">=</span><span class="p">[],</span>
+                                       <span class="n">updates</span><span class="o">=</span><span class="p">{</span><span class="bp">self</span><span class="o">.</span><span class="n">w</span><span class="p">:</span> <span class="n">w_update</span><span class="p">},</span>
+                                       <span class="n">name</span><span class="o">=</span><span class="s2">&quot;trainW&quot;</span><span class="p">,</span>
+                                       <span class="n">allow_input_downcast</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="BetaNMF.score"><a class="viewcode-back" href="../doc.html#beta_nmf.BetaNMF.score">[docs]</a>    <span class="k">def</span> <span class="nf">score</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Compute factorisation score</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        out : Float</span>
+<span class="sd">            factorisation score&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">div</span><span class="p">()</span></div></div>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../index.html">Beta NMF with mini-batch updates 1.0 documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="index.html" >Module code</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &copy; Copyright 2016, Romain Serizel.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.1.
+    </div>
+  </body>
+</html>

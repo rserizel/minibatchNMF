@@ -1,0 +1,148 @@
+Mini-batch multiplicative updates for NMF with  :math:`\beta` -divergence
+-------------------------------------------------------------------------
+In [1]_ we propose mini-batch stochastic algorithms to perform NMF efficiently on large data matrices. Besides the stochastic aspect, the mini-batch approach allows exploiting intesive computing devices such as general
+purpose graphical processing units to decrease the processing time further and in some cases outperform coordinate descent approach.
+
+NMF with :math:`\beta` -divergence and multiplicative updates
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+Consider the (nonnegative) matrix :math:`\textbf{V}\in\mathbb{R}_+^{F\times N}`. The goal of NMF [2]_ is to find a factorisation for :math:`\textbf{V}` of the form:
+
+.. math::
+	\textbf{V} \approx \textbf{W}\textbf{H} 
+	:label: nmf
+
+where :math:`\textbf{W}\in\mathbb{R}_+^{F\times K}` , :math:`\textbf{H}\in\mathbb{R}_+^{K\times N}` and :math:`K` is the number of components in the decomposition. The NMF model estimation is usually considered as solving the following optimisation problem:
+
+.. math::
+	\min_{\textbf{W}\textbf{H}}D(\textbf{V} | \textbf{W}\textbf{H})\quad\mathrm{s.t.}\quad\textbf{W}\geq 0,\ \textbf{H}\geq 0\mathrm{.}
+
+Where :math:`D` is a separable divergence such as:
+
+.. math::
+	D(\textbf{V}|\textbf{W}\textbf{H}) = \sum\limits_{f=1}^{F}\sum\limits_{n=1}^{N}d([\textbf{V}]_{fn}|[\textbf{WH}]_{fn})\textrm{,}
+
+with :math:`[.]_{fn}` is the element on column :math:`n` and line :math:`f` of a matrix and :math:`d` is a scalar cost function. A common choice for the cost function is the :math:`\beta` -divergence [3]_  [4]_ [5]_ defined as follows:
+
+.. math::
+ 	d_{\beta}(x|y)\triangleq 
+  	\begin{cases}
+ 	\frac{1}{\beta(\beta -1)} (x^{\beta} + (\beta -1)y^{\beta} - \beta xy^{(\beta-1)})&\beta\in\mathbb{R}\backslash\{0,1\}\nonumber\\
+ 	x\log\frac{x}{y} - x + y&\beta=1\nonumber\\
+ 	\frac{x}{y} -\log\frac{x}{y} - 1&\beta=0\nonumber\textrm{.}
+ 	\end{cases}
+ 	:label: div
+
+Popular cost functions such as the Euclidean distance, the generalised KL divergence [6]_ and the IS divergence [7]_ and all particular cases of the :math:`\beta`-divergence` (obtained for :math:`\beta=2` , :math:`1` and :math:`0`, respectively). The use of the :math:`\beta` -divergence for NMF has been studied extensively in Févotte et al. [8]_.  In most cases NMF problem is solved using a two-block coordinate descent approach. Each of the factors :math:`\textbf{W}` and :math:`\textbf{H}` is optimised alternatively. The sub-problem in one factor can then be considered as a nonnegative least square problem (NNLS) [9]_. The approach implemented here to solve these NNLS problems relies on the multiplicative update rules introduced in Lee et al. [2]_ for the Euclidean distance and later generalised to the the :math:`\beta` -divergence [9]_ :
+
+.. math::
+	\textbf{H}\gets \textbf{H}\odot\frac{\textbf{W}^T\left[(\textbf{W}\textbf{H})^{\beta-2}\odot\textbf{V}\right]}
+	{\textbf{W}^T(\textbf{W}\textbf{H})^{\beta-1}}
+	:label: upH
+.. math::
+	\textbf{W}\gets \textbf{W}\odot\frac{\left[(\textbf{W}\textbf{H})^{\beta-2}\odot\textbf{V}\right]\textbf{H}^T }
+	{(\textbf{W}\textbf{H})^{\beta-1}\textbf{H}^T}\mathrm{;}
+	:label: upW
+
+
+where :math:`\odot` is the element-wise product (Hadamard product) and division and power are element-wise. The matrices :math:`\textbf{H}` and :math:`\textbf{W}` are then updated according to an alternating update scheme.
+
+Mini-batch multiplicative updates for NMF
++++++++++++++++++++++++++++++++++++++++++
+The standard update scheme requires the complete matrix :math:`\textbf{V}`. When considering time series with a large number of data points(or time series that are expending in time) running this algorithm can become prohibitive. Capitalising on the separability of the divergence :eq:`div` it is possible to perform NMF on mini-batch of data to reduce to computational burden of to allow for parallel computations [10]_. 
+
+When considering time series as defined above, each column (:math:`V_i`) of the matrix :math:`\textbf{V}` contain all the features for a specific time frame and each row represent a particular feature along time. The number of row is then a parameter of the low-level representation and only the number of columns can increase while increasing the amount of data. Therefore, in contrast to the approach proposed by Simsekli *et al.* [10]_ we decide to decompose the matrix :math:`\textbf{V}` in :math:`B` mini-batches of time frames that contains all the features for the given frame. 
+
+.. figure:: batch.png
+	:align: center
+
+	**Fig. 1** Mini-batch decomposition of the data matrix :math:`\textbf{V}`
+
+For each batch :math:`b`, the update of the activations :math:`\textbf{H}_b` corresponding to :math:`\textbf{V}_b` can be obtained independently from all the other batches with the standard MU~\eqref{upH}. The update of the bases :math:`\textbf{W}` on the other hand require the whole matrix :math:`\textbf{V}` to be processed. The positive contribution of the gradient (`\nabla^+\textbf{W}`) and the negative contribution of the gradient :math:`\nabla^-\textbf{W}` are accumulated along the mini-batches. :math:`\textbf{W}` is updated once per epoch with the standard MU rule :eq:`upW` as described in Algorithm [1]_. Note that this is theoretically similar to the standard full-gradient (FG) MU rules.
+
+
+
+Stochastic mini-batch updates
++++++++++++++++++++++++++++++
+\label{stoMB}
+When aiming at minimizing an Euclidean distance, it has been shown than drawing samples randomly can improve greatly the convergence speed in dictionary learning and by extension in NMF [11]_ [12]_. We propose to apply a similar idea to MU in order to take advantage of the wide variety of divergences covered by the :math:`\beta`-divergence. Instead of selecting the mini-batch sequentially on the original data :math:`\textbf{V}` as above, we propose to draw mini-batches randomly on a shuffled version of :math:`\textbf{V}`. The mini-batch update of :math:`\textbf{H}` still need one full pass through the data but a single mini-batch can be used to update :math:`\textbf{W}`, in an way analogous to stochastic gradient (SG) methods [13]_. 
+
+Two different strategies can be considered to updates :math:`\textbf{W}`. The first option is to updates :math:`\textbf{W}` for each mini-batch, this approach is denoted asymmetric SG mini-batch MU (ASG-MU) as :math:`\textbf{H}` and :math:`\textbf{W}` are updated asymmetrically (the full :math:`\textbf{H}` is updated once per epoch while :math:`\textbf{W}` is updated for each mini-batch). The second option is to update :math:`\textbf{W}` only once per epoch on a randomly selected mini-batch a described this approach will be referred to as greedy SG mini-batch MU (GSG-MU). Detailled description of the algorithm can be found in [1]_
+
+Stochastic average gradient mini-batch updates
+++++++++++++++++++++++++++++++++++++++++++++++
+Stochastic average gradient (SAG) [14]_ is a method recently introduced for optimizing cost functions that are a sum of convex functions (which is the case here). SAG provide an intermediate between FG-like methods and SG-like methods. SAG then allows to maintain convergence rate close to FG methods with a complexity comparable to SG methods.
+
+We propose to apply SAG-like method to update the dictionaries :math:`\textbf{W}` in a mini-batch based NMF. Note that, as the full pass through the data is needed to update :math:`\textbf{H}` it would not make sense to apply SAG here. The key idea is that for each mini-batch :math:`b` instead of using the gradient computed locally to update :math:`\textbf{W}`, we propose to use the mini-batch data to update the full gradient negative and positive contributions:
+
+.. math::
+	\begin{align}
+	\nabla^-\textbf{W}&\gets\nabla^-\textbf{W} - \nabla^-_{\mathrm{old}}\textbf{W}_b + \nabla^-_{\mathrm{new}}\textbf{W}_b\\
+	\nabla^+\textbf{W}&\gets\nabla^+\textbf{W} - \nabla^+_{\mathrm{old}}\textbf{W}_b + \nabla^+_{\mathrm{new}}\textbf{W}_b
+	\end{align}
+
+where :math:`\nabla^-_{\mathrm{new}}\textbf{W}_b` and :math:`\nabla^+_{\mathrm{new}}\textbf{W}_b` are the negative and positive contribution to the gradient of :math:`\textbf{W}` calculated on the mini-batch :math:`b`, respectively. :math:`\nabla^-_{\mathrm{old}}\textbf{W}_b` and :math:`\nabla^+_{\mathrm{old}}\textbf{W}_b` are the previous negative and positive contribution to the gradient of :math:`\textbf{W}` for the mini-batch :math:`b`, respectively.
+
+Similarly as above, two different strategies can be considered to updates :math:`\textbf{W}`. The first option is to updates :math:`\textbf{W}` for each mini-batch this approach is denoted asymmetric SAG mini-batch MU (ASAG-MU). The second option is to update :math:`\textbf{W}` only once per epoch on a randomly selected mini-batch which is greedy SAG mini-batch MU (GSAG-MU). Detailled description of the algorithm can be found in [1]_
+
+Download
+++++++++
+Source code available at https://github.com/rserizel/groupNMF
+
+Citation
+++++++++
+If you are using this source code please consider citing the following paper: 
+
+.. topic:: Reference
+
+	R. Serizel, S. Essid, and G. Richard. “Mini-batch stochastic approaches for accelerated multiplicative updates in nonnegative matrix factorisation with beta-divergence”. Accepted for publication In *Proc. of MLSP*, p. 5, 2016.
+
+
+.. topic:: Bibtex
+
+	@inproceedings{serizel2016batch,
+
+  	title={Mini-batch stochastic approaches for accelerated multiplicative updates in nonnegative matrix factorisation with beta-divergence},
+
+  	author={Serizel, Romain and Essid, Slim and Richard, Ga{\"e}l},
+
+  	booktitle={IEEE International Workshop on Machine Learning for Signal Processing (MLSP)},
+
+  	pages={5},
+
+  	year={2016},
+
+  	organization={IEEE}
+	}
+
+
+References
+++++++++++
+
+.. [#] R. Serizel, S. Essid, and G. Richard. “Mini-batch stochastic approaches for accelerated multiplicative updates in nonnegative matrix factorisation with beta-divergence”. Accepted for publication In *Proc. of MLSP*, p. 5, 2016.
+
+.. [#] D. D. Lee and H. S. Seung, “Learning the parts of objects by non-negative matrix factorization.,” *Nature*, vol. 401, no. 6755, pp. 788–791, 1999.
+
+.. [#] A. Basu, I. R. Harris, N. L. Hjort, and M. C. Jones, “Robust and efficient estimation by minimising a density power divergence,” *Biometrika*, vol. 85, no. 3, pp. 549–559, 1998.
+
+.. [#] A. Cichocki and S. Amari, “Families of alpha-beta-and gamma-divergences: Flexible and robust measures of similarities,” *Entropy*, vol. 12, no. 6, pp. 1532–1568, 2010.
+
+.. [#] S. Eguchi and Y. Kano, “Robustifing maximum likelihood estimation,” Research Memo 802, Institute of Statistical Mathematics, June 2001.
+
+.. [#] S. Kullback and R. A. Leibler, “On information and sufficiency,” *The annals of mathematical statistics*, pp. 79–86, 1951.
+
+.. [#] F. Itakura, “Minimum prediction residual principle applied to speech recognition,” *IEEE Transactions on Acoustics, Speech and Signal Processing*, vol. 23, no. 1, pp. 67–72, 1975.
+
+.. [#] C. Févotte and J. Idier, “Algorithms for nonnegative matrix factorization with the beta-divergence,” *Neural Computation*, vol. 23, no. 9, pp. 2421–2456, 2011.
+
+.. [#] N. Gillis, “The why and how of nonnegative matrix factorization,” in *Regularization, Optimization, Kernels, and Support Vector Machines*, M. Signoretto J.A.K. Suykens and A. Argyriou, Eds., Machine Learning and Pattern Recognition Series, pp. 257 – 291. Chapman & Hall/CRC, 2014.
+
+.. [#] U. Simsekli, H. Koptagel, H. Guldas¸, A. Taylan Cemgil, F. Oztoprak, and S. Ilker Birbil, “Parallel Stochastic Gradient Markov Chain Monte Carlo for Matrix Factorisation Models,” *ArXiv e-prints*, June 2015.
+
+.. [#] F. Mairal, J.and Bach, J. Ponce, and G. Sapiro, “Online learning for matrix factorization and sparse coding,” *The Journal of Machine Learning Research*, vol. 11, pp. 19–60, 2010.
+
+.. [#] A. Mensch, J. Mairal, B. Thirion, and G. Varoquaux, “Dictionary Learning for Massive Matrix Factorization,” in Proc. of *ICML*, 2016.
+
+.. [#] L. Bottou, “Online learning and stochastic approximations,” *On-line learning* in neural networks, vol. 17, no. 9, pp. 142.
+
+.. [#] M. Schmidt, N. Le Roux, and F. Bach, “Minimizing Finite Sums with the Stochastic Average Gradient,” *ArXiv e-prints*, Sept. 2013.

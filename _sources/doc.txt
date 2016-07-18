@@ -1,0 +1,11 @@
+Documentation
+-------------
+.. automodule:: beta_nmf_minibatch
+	:members:
+
+.. automodule:: base
+	:members:
+.. automodule:: costs
+	:members:
+.. automodule:: updates
+	:members:
