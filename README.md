@@ -31,4 +31,4 @@ Bibtex
 
 ## Author
 
-Romain Serizel, 2015 -- Present
+Romain Serizel, 2016 -- Present
