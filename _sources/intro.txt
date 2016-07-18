@@ -87,7 +87,7 @@ Similarly as above, two different strategies can be considered to updates :math:
 
 Download
 ++++++++
-Source code available at https://github.com/rserizel/groupNMF
+Source code available at https://github.com/rserizel/minibatchNMF
 
 Citation
 ++++++++
