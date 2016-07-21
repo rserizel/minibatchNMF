@@ -11,6 +11,13 @@ bbeta_nmf_minibatch need Python >= 2.7, numpy >= 10.1, Theano >= 0.8, scikit-lea
 
 Dcoumentation available at http://rserizel.github.io/minibatchNMF/
 
+
+## Getting Started
+
+A short example is available as a [notebook]
+
+[notebook]: https://github.com/rserizel/beta_nmf/blob/master/BetaNMF_howto.ipynb
+
 ## Citation
 
 If you are using this source code please consider citing the following paper: 
@@ -31,4 +38,4 @@ Bibtex
 
 ## Author
 
-Romain Serizel, 2016 -- Present
+Romain Serizel, 2015 -- Present

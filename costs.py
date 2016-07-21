@@ -28,6 +28,7 @@ def beta_div(X, W, H, beta):
     -------
     div : Theano scalar
         beta divergence D(X|WH)"""
+
     div = ifelse(
       T.eq(beta, 2),
       T.sum(1. / 2 * T.power(X - T.dot(H, W), 2)),

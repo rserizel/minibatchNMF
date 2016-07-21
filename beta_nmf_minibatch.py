@@ -32,7 +32,7 @@ class BetaNMF(object):
         The number of latent components for the NMF model
 
 
-    beta: arbitrary float.
+    beta: arbitrary float (default 2).
         The beta-divergence to consider. Particular cases of interest are
          * beta=2 : Euclidean distance
          * beta=1 : Kullback Leibler
@@ -60,7 +60,7 @@ class BetaNMF(object):
         The numer of iterations to wait between two computation and printing
         of the cost
 
-    init : string (default 'random')
+    init_mode : string (default 'random')
         * random : initalise the factors randomly
         * custom : intialise the factors with custom value
 
@@ -123,10 +123,10 @@ class BetaNMF(object):
     """
 
     # Constructor
-    def __init__(self, data_shape, n_components=50, beta=0, n_iter=50,
+    def __init__(self, data_shape, n_components=50, beta=2, n_iter=50,
                  fixed_factors=None, cache1_size=0,
                  batch_size=100, verbose=0,
-                 init='random', W=None, H=None, solver='mu_batch',
+                 init_mode='random', W=None, H=None, solver='mu_batch',
                  nb_batch_w=1, sag_memory=0):
         self.data_shape = data_shape
         self.n_components = n_components
@@ -136,6 +136,7 @@ class BetaNMF(object):
         self.batch_ind = np.zeros((self.nb_batch, self.batch_size))
 
         if cache1_size > 0:
+            cache1_size = min((cache1_size, data_shape[0]))
             if cache1_size < self.batch_size:
                 raise ValueError('cache1_size should be at '
                                  'least equal to batch_size')
@@ -156,9 +157,12 @@ class BetaNMF(object):
         self.solver = solver
         self.scores = []
         self.nb_batch_w = nb_batch_w
+        if fixed_factors is None:
+            fixed_factors = []
         self.fixed_factors = fixed_factors
         fact_ = [base.nnrandn((dim, self.n_components)) for dim in data_shape]
-        if init == 'custom':
+        self.init_mode = init_mode
+        if self.init_mode == 'custom':
             fact_[0] = H
             fact_[1] = W
         self.w = theano.shared(fact_[1].astype(theano.config.floatX),
@@ -174,18 +178,54 @@ class BetaNMF(object):
             name="X cache1")
         self.init()
 
-    def fit(self, data, full_sag=True, cyclic=False):
+    def check_shape(self):
+        """Check that all the matrix have consistent shapes
+        """
+        batch_shape = self.x_cache1.get_value().shape
+        dim = long(self.n_components)
+        if self.w.get_value().shape != (self.data_shape[1], dim):
+            print "Inconsistent data for W, expected {1}, found {0}".format(
+                self.w.get_value().shape,
+                (self.data_shape[1], dim))
+            raise SystemExit
+        if self.factors_[0].shape != (self.data_shape[0], dim):
+            print "Inconsistent shape for H, expected {1}, found {0}".format(
+                self.factors_[0].shape,
+                (self.data_shape[0], dim))
+            raise SystemExit
+        if self.h_cache1.get_value().shape != (batch_shape[0], dim):
+            print "Inconsistent shape for h_cache1, expected {1}, found {0}".format(
+                self.h_cache1.get_value().shape,
+                (batch_shape[0], dim))
+            raise SystemExit
+
+    def fit(self, data, cyclic=False, warm_start=False):
         """Learns NMF model
 
         Parameters
         ----------
         data : ndarray with nonnegative entries
             The input array
+
+        cyclic : Boolean (default False)
+            pick the sample cyclically
+
+        warm_start : Boolean (default False)
+            start from previous values
         """
-        self.prepare_batch(~cyclic)
-        self.prepare_cache1(~cyclic)
+        self.data_shape = data.shape
+        if (not warm_start) & (self.init_mode is not 'custom'):
+            print "cold start"
+            self.set_factors(data, fixed_factors=self.fixed_factors)
+        self.check_shape()
+        self.prepare_batch(False)
+        self.prepare_cache1(False)
         div_func = self.get_div_function()
-        scores = np.zeros((self.n_iter + 1, 2))
+        if self.verbose > 0:
+            scores = np.zeros((
+                np.floor(self.n_iter/self.verbose) + 2, 2))
+        else:
+            scores = np.zeros((2, 2))
         if self.solver is 'asag_mu' or self.solver is 'gsag_mu':
             grad_func = self.get_gradient_mu_sag()
             update_func = self.get_updates()
@@ -208,10 +248,13 @@ class BetaNMF(object):
             self.h_cache1.set_value(self.factors_[0][
                     current_cache_ind, ].astype(theano.config.floatX))
             score += div_func['div_cache1']()
-
+        score_ind = 0
         scores[0, ] = [score, time.time() - tick]
 
-        print 'Intitial score = %.1f' % score
+        self.prepare_batch(not cyclic)
+        self.prepare_cache1(not cyclic)
+
+        print 'Intitial score = %.2f' % score
         print 'Fitting NMF model with %d iterations....' % self.n_iter
         if self.nb_cache1 == 1:
             current_cache_ind = np.hstack(self.batch_ind[
@@ -229,7 +272,7 @@ class BetaNMF(object):
         # main loop
         for it in range(self.n_iter):
             tick = time.time()
-            self.prepare_cache1(~cyclic)
+            self.prepare_cache1(not cyclic)
             score = 0
             for cache_ind in range(self.nb_cache1):
                 if self.nb_cache1 > 1:
@@ -274,6 +317,8 @@ class BetaNMF(object):
                 if self.nb_cache1 > 1:
                     self.factors_[0][current_cache_ind, ] =\
                         self.h_cache1.get_value()
+                else:
+                    self.factors_[0] = self.h_cache1.get_value()
             if self.solver is 'mu_batch':
                 self.update_mu_batch_w(update_func)
             elif self.solver is 'gsag_mu' or self.solver is 'gsg_mu':
@@ -290,13 +335,30 @@ class BetaNMF(object):
                             self.cache1_ind[
                                 cache_ind, self.cache1_ind[cache_ind] >= 0]]),
                         ].astype(theano.config.floatX))
-                    score += div_func['div_cache1']()
+                    if (it+1) % self.verbose == 0:
+                        score += div_func['div_cache1']()
             else:
-                score = div_func['div_cache1']()
-
-            print 'Intitial score (cache1) = %.1f' % score
-            scores[it + 1, ] = [score, time.time() - tick + scores[it, 1]]
-            tick = time.time()
+                self.factors_[0] = self.h_cache1.get_value()
+                if (it+1) % self.verbose == 0:
+                    score = div_func['div_cache1']()
+            if (it+1) % self.verbose == 0:
+                score_ind += 1
+                scores[score_ind, ] = [
+                    score, time.time() - tick + scores[score_ind - 1, 1]]
+                print ('Iteration %d / %d, duration=%.1fms, cost=%f'
+                       % (it + 1,
+                          self.n_iter,
+                          scores[score_ind, 1] * 1000,
+                          scores[score_ind, 0]))
+                tick = time.time()
+        score_ind += 1
+        scores[score_ind, ] = [
+            score, time.time() - tick + scores[score_ind - 1, 1]]
+        print ('Iteration %d / %d, duration=%.1fms, cost=%f'
+               % (it + 1,
+                  self.n_iter,
+                  scores[-1, 1] * 1000,
+                  scores[-1, 0]))        
         return scores
 
     def get_div_function(self):
@@ -442,53 +504,6 @@ class BetaNMF(object):
             train_h=train_h,
             train_w=train_w)
 
-    def set_params(self, W=None, H=None):
-        """Re-set theano based parameters according to the object attributes.
-
-        Parameters
-        ----------
-        W : array (optionnal)
-            Value for factor W when custom initialisation is used
-
-        H : array (optionnal)
-            Value for factor H when custom initialisation is used
-        """
-        self.nb_batch = int(np.ceil(np.true_divide(self.data_shape[0],
-                                                   self.batch_size)))
-        self.batch_ind = np.zeros((self.nb_batch, self.batch_size))
-
-        if self.cache1_size > 0 and self.cache1_size < self.data_shape[0]:
-            if self.cache1_size < self.batch_size:
-                raise ValueError('cache1_size should be at '
-                                 'least equal to batch_size')
-            self.cache1_size = self.cache1_size/self.batch_size * self.batch_size
-            self.nb_cache1 = int(np.ceil(np.true_divide(self.data_shape[0],
-                                                        self.cache1_size)))
-        else:
-            self.cache1_size = self.data_shape[0]
-            self.nb_cache1 = 1
-        print self.cache1_size
-        print self.batch_size
-
-        self.forget_factor = 1./(self.sag_memory + 1)
-        fact_ = [base.nnrandn((dim, self.n_components))
-                 for dim in self.data_shape]
-        if self.init == 'custom':
-            fact_[0] = H
-            fact_[1] = W
-        self.w = theano.shared(fact_[1].astype(theano.config.floatX),
-                               name="W", borrow=True, allow_downcast=True)
-        self.h_cache1 = theano.shared(fact_[0][:self.cache1_size,
-                                               ].astype(theano.config.floatX),
-                                      name="H cache1", borrow=True,
-                                      allow_downcast=True)
-        self.factors_ = fact_
-        self.x_cache1 = theano.shared(np.zeros((self.cache1_size,
-                                                self.data_shape[1])).astype(
-            theano.config.floatX),
-            name="X cache1")
-        self.init()
-
     def init(self):
         """Initialise theano variable to store the gradients"""
         self.grad_w = theano.shared(
@@ -540,6 +555,87 @@ class BetaNMF(object):
                                                 self.batch_size)))
                                            )).astype(int)
 
+    def set_factors(self, data, W=None, H=None, fixed_factors=None):
+        """Re-set theano based parameters according to the object attributes.
+
+        Parameters
+        ----------
+        W : array (optionnal)
+            Value for factor W when custom initialisation is used
+
+        H : array (optionnal)
+            Value for factor H when custom initialisation is used
+
+        fixed_factors : array  (default Null)
+            list of factors that are not updated
+                e.g. fixed_factors = [0] -> H is not updated
+
+                fixed_factors = [1] -> W is not updated
+        """
+        self.data_shape = data.shape
+        self.nb_batch = int(np.ceil(np.true_divide(self.data_shape[0],
+                                                   self.batch_size)))
+        self.batch_ind = np.zeros((self.nb_batch, self.batch_size))
+
+        if self.cache1_size > 0 and self.cache1_size < self.data_shape[0]:
+            if self.cache1_size < self.batch_size:
+                raise ValueError('cache1_size should be at '
+                                 'least equal to batch_size')
+            self.cache1_size = self.cache1_size/self.batch_size * self.batch_size
+            self.nb_cache1 = int(np.ceil(np.true_divide(self.data_shape[0],
+                                                        self.cache1_size)))
+        else:
+            self.cache1_size = self.data_shape[0]
+            self.nb_cache1 = 1
+
+        self.forget_factor = 1./(self.sag_memory + 1)
+        fact_ = [base.nnrandn((dim, self.n_components))
+                 for dim in self.data_shape]
+        if H is not None:
+            fact_[0] = H
+        if W is not None:
+            fact_[1] = W
+        if fixed_factors is None:
+            fixed_factors = []
+        if 1 not in fixed_factors:
+            self.w = theano.shared(fact_[1].astype(theano.config.floatX),
+                                   name="W", borrow=True, allow_downcast=True)
+        if 0 not in fixed_factors:
+            self.h_cache1 = theano.shared(
+                fact_[0][
+                    :self.cache1_size, ].astype(theano.config.floatX),
+                name="H cache1", borrow=True,
+                allow_downcast=True)
+            self.factors_[0] = fact_[0]
+        self.factors_ = fact_
+        self.x_cache1 = theano.shared(np.zeros((self.cache1_size,
+                                                self.data_shape[1])).astype(
+            theano.config.floatX),
+            name="X cache1")
+        self.init()
+
+    def transform(self, data, warm_start=False):
+        """Project data X on the basis W
+
+        Parameters
+        ----------
+        X : array
+            The input data
+        warm_start : Boolean (default False)
+            start from previous values
+
+        Returns
+        -------
+        H : array
+            Activations
+        """
+        self.fixed_factors = [1]
+        if not warm_start:
+            print "cold start"
+            self.set_factors(data, fixed_factors=self.fixed_factors)
+        self.fit(data, warm_start=True)
+        return self.factors_[0]
+
     def update_mu_sag(self, batch_ind, update_func, grad_func):
         """Update current batch with SAG based algorithms
 
@@ -555,10 +651,12 @@ class BetaNMF(object):
         grad_func : Theano compiled function
             Gradient function
         """
-        grad_func['grad_h'](batch_ind)
-        update_func['train_h'](batch_ind)
-        grad_func['grad_w'](batch_ind)
-        update_func['train_w']()
+        if 1 not in self.fixed_factors:
+            grad_func['grad_h'](batch_ind)
+            update_func['train_h'](batch_ind)
+        if 0 not in self.fixed_factors:
+            grad_func['grad_w'](batch_ind)
+            update_func['train_w']()
 
     def update_mu_batch_h(self, batch_ind, update_func, grad_func):
         """Update h for current batch with standard MU
@@ -575,9 +673,10 @@ class BetaNMF(object):
         grad_func : Theano compiled function
             Gradient function
         """
-        grad_func['grad_h'](batch_ind)
-        update_func['train_h'](batch_ind)
-        grad_func['grad_w'](batch_ind)
+        if 0 not in self.fixed_factors:
+            grad_func['grad_h'](batch_ind)
+            update_func['train_h'](batch_ind)
+            grad_func['grad_w'](batch_ind)
 
     def update_mu_batch_w(self, udpate_func):
         """Update W with standard MU
@@ -587,7 +686,11 @@ class BetaNMF(object):
         update_func : Theano compiled function
             Update function
         """
-        udpate_func['train_w']()
-        self.grad_w.set_value(np.zeros((2,
-                              self.data_shape[1],
-                              self.n_components)).astype(theano.config.floatX))
+        if 1 not in self.fixed_factors:
+            udpate_func['train_w']()
+            self.grad_w.set_value(
+                np.zeros((
+                    2,
+                    self.data_shape[1],
+                    self.n_components)).astype(
+                        theano.config.floatX))
