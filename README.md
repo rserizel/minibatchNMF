@@ -16,7 +16,7 @@ Dcoumentation available at http://rserizel.github.io/minibatchNMF/
 
 A short example is available as a [notebook]
 
-[notebook]: https://github.com/rserizel/beta_nmf/blob/master/BetaNMF_howto.ipynb
+[notebook]: https://github.com/rserizel/beta_nmf/blob/master/minibatch_BetaNMF_howto.ipynb
 
 ## Citation
 
