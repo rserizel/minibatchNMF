@@ -3,6 +3,10 @@ Download
 
 Source code available at https://github.com/rserizel/minibatchNMF
 
+Getting Started
+---------------
+A short example is available as at https://github.com/rserizel/beta_nmf/blob/master/minibatch_BetaNMF_howto.ipynb
+
 If you are using this source code please consider citing the following paper: 
 
 .. topic:: Reference

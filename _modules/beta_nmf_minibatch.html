@@ -82,7 +82,7 @@
 <span class="sd">        The number of latent components for the NMF model</span>
 
 
-<span class="sd">    beta: arbitrary float.</span>
+<span class="sd">    beta: arbitrary float (default 2).</span>
 <span class="sd">        The beta-divergence to consider. Particular cases of interest are</span>
 <span class="sd">         * beta=2 : Euclidean distance</span>
 <span class="sd">         * beta=1 : Kullback Leibler</span>
@@ -110,7 +110,7 @@
 <span class="sd">        The numer of iterations to wait between two computation and printing</span>
 <span class="sd">        of the cost</span>
 
-<span class="sd">    init : string (default &#39;random&#39;)</span>
+<span class="sd">    init_mode : string (default &#39;random&#39;)</span>
 <span class="sd">        * random : initalise the factors randomly</span>
 <span class="sd">        * custom : intialise the factors with custom value</span>
 
@@ -173,10 +173,10 @@
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="c1"># Constructor</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data_shape</span><span class="p">,</span> <span class="n">n_components</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">beta</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">n_iter</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data_shape</span><span class="p">,</span> <span class="n">n_components</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">beta</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">n_iter</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span>
                  <span class="n">fixed_factors</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">cache1_size</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
                  <span class="n">batch_size</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
-                 <span class="n">init</span><span class="o">=</span><span class="s1">&#39;random&#39;</span><span class="p">,</span> <span class="n">W</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">H</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">solver</span><span class="o">=</span><span class="s1">&#39;mu_batch&#39;</span><span class="p">,</span>
+                 <span class="n">init_mode</span><span class="o">=</span><span class="s1">&#39;random&#39;</span><span class="p">,</span> <span class="n">W</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">H</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">solver</span><span class="o">=</span><span class="s1">&#39;mu_batch&#39;</span><span class="p">,</span>
                  <span class="n">nb_batch_w</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">sag_memory</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">data_shape</span> <span class="o">=</span> <span class="n">data_shape</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">n_components</span> <span class="o">=</span> <span class="n">n_components</span>
@@ -186,6 +186,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">batch_ind</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">nb_batch</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">))</span>
 
         <span class="k">if</span> <span class="n">cache1_size</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">cache1_size</span> <span class="o">=</span> <span class="nb">min</span><span class="p">((</span><span class="n">cache1_size</span><span class="p">,</span> <span class="n">data_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
             <span class="k">if</span> <span class="n">cache1_size</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;cache1_size should be at &#39;</span>
                                  <span class="s1">&#39;least equal to batch_size&#39;</span><span class="p">)</span>
@@ -206,9 +207,12 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">solver</span> <span class="o">=</span> <span class="n">solver</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">scores</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">nb_batch_w</span> <span class="o">=</span> <span class="n">nb_batch_w</span>
+        <span class="k">if</span> <span class="n">fixed_factors</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">fixed_factors</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">fixed_factors</span> <span class="o">=</span> <span class="n">fixed_factors</span>
         <span class="n">fact_</span> <span class="o">=</span> <span class="p">[</span><span class="n">base</span><span class="o">.</span><span class="n">nnrandn</span><span class="p">((</span><span class="n">dim</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_components</span><span class="p">))</span> <span class="k">for</span> <span class="n">dim</span> <span class="ow">in</span> <span class="n">data_shape</span><span class="p">]</span>
-        <span class="k">if</span> <span class="n">init</span> <span class="o">==</span> <span class="s1">&#39;custom&#39;</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">init_mode</span> <span class="o">=</span> <span class="n">init_mode</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_mode</span> <span class="o">==</span> <span class="s1">&#39;custom&#39;</span><span class="p">:</span>
             <span class="n">fact_</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">H</span>
             <span class="n">fact_</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">W</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">w</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">fact_</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">theano</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">floatX</span><span class="p">),</span>
@@ -224,18 +228,54 @@
             <span class="n">name</span><span class="o">=</span><span class="s2">&quot;X cache1&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">init</span><span class="p">()</span>
 
-<div class="viewcode-block" id="BetaNMF.fit"><a class="viewcode-back" href="../doc.html#beta_nmf_minibatch.BetaNMF.fit">[docs]</a>    <span class="k">def</span> <span class="nf">fit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">full_sag</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span> <span class="n">cyclic</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+<div class="viewcode-block" id="BetaNMF.check_shape"><a class="viewcode-back" href="../doc.html#beta_nmf_minibatch.BetaNMF.check_shape">[docs]</a>    <span class="k">def</span> <span class="nf">check_shape</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Check that all the matrix have consistent shapes</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">batch_shape</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">x_cache1</span><span class="o">.</span><span class="n">get_value</span><span class="p">()</span><span class="o">.</span><span class="n">shape</span>
+        <span class="n">dim</span> <span class="o">=</span> <span class="nb">long</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_components</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">w</span><span class="o">.</span><span class="n">get_value</span><span class="p">()</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">dim</span><span class="p">):</span>
+            <span class="k">print</span> <span class="s2">&quot;Inconsistent data for W, expected {1}, found {0}&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">w</span><span class="o">.</span><span class="n">get_value</span><span class="p">()</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
+                <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">dim</span><span class="p">))</span>
+            <span class="k">raise</span> <span class="ne">SystemExit</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">factors_</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">dim</span><span class="p">):</span>
+            <span class="k">print</span> <span class="s2">&quot;Inconsistent shape for H, expected {1}, found {0}&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">factors_</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
+                <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">dim</span><span class="p">))</span>
+            <span class="k">raise</span> <span class="ne">SystemExit</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">h_cache1</span><span class="o">.</span><span class="n">get_value</span><span class="p">()</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="n">batch_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">dim</span><span class="p">):</span>
+            <span class="k">print</span> <span class="s2">&quot;Inconsistent shape for h_cache1, expected {1}, found {0}&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">h_cache1</span><span class="o">.</span><span class="n">get_value</span><span class="p">()</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
+                <span class="p">(</span><span class="n">batch_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">dim</span><span class="p">))</span>
+            <span class="k">raise</span> <span class="ne">SystemExit</span></div>
+
+<div class="viewcode-block" id="BetaNMF.fit"><a class="viewcode-back" href="../doc.html#beta_nmf_minibatch.BetaNMF.fit">[docs]</a>    <span class="k">def</span> <span class="nf">fit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">cyclic</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span> <span class="n">warm_start</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Learns NMF model</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        data : ndarray with nonnegative entries</span>
 <span class="sd">            The input array</span>
+
+<span class="sd">        cyclic : Boolean (default False)</span>
+<span class="sd">            pick the sample cyclically</span>
+
+<span class="sd">        warm_start : Boolean (default False)</span>
+<span class="sd">            start from previous values</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">prepare_batch</span><span class="p">(</span><span class="o">~</span><span class="n">cyclic</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">prepare_cache1</span><span class="p">(</span><span class="o">~</span><span class="n">cyclic</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">data_shape</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span>
+        <span class="k">if</span> <span class="p">(</span><span class="ow">not</span> <span class="n">warm_start</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">init_mode</span> <span class="ow">is</span> <span class="ow">not</span> <span class="s1">&#39;custom&#39;</span><span class="p">):</span>
+            <span class="k">print</span> <span class="s2">&quot;cold start&quot;</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">set_factors</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">fixed_factors</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">fixed_factors</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">check_shape</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">prepare_batch</span><span class="p">(</span><span class="bp">False</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">prepare_cache1</span><span class="p">(</span><span class="bp">False</span><span class="p">)</span>
         <span class="n">div_func</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_div_function</span><span class="p">()</span>
-        <span class="n">scores</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">n_iter</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">scores</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">floor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_iter</span><span class="o">/</span><span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">)</span> <span class="o">+</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">scores</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">solver</span> <span class="ow">is</span> <span class="s1">&#39;asag_mu&#39;</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">solver</span> <span class="ow">is</span> <span class="s1">&#39;gsag_mu&#39;</span><span class="p">:</span>
             <span class="n">grad_func</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_gradient_mu_sag</span><span class="p">()</span>
             <span class="n">update_func</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_updates</span><span class="p">()</span>
@@ -258,10 +298,13 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">h_cache1</span><span class="o">.</span><span class="n">set_value</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">factors_</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span>
                     <span class="n">current_cache_ind</span><span class="p">,</span> <span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">theano</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">floatX</span><span class="p">))</span>
             <span class="n">score</span> <span class="o">+=</span> <span class="n">div_func</span><span class="p">[</span><span class="s1">&#39;div_cache1&#39;</span><span class="p">]()</span>
-
+        <span class="n">score_ind</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="n">scores</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">score</span><span class="p">,</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">tick</span><span class="p">]</span>
 
-        <span class="k">print</span> <span class="s1">&#39;Intitial score = </span><span class="si">%.1f</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">score</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">prepare_batch</span><span class="p">(</span><span class="ow">not</span> <span class="n">cyclic</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">prepare_cache1</span><span class="p">(</span><span class="ow">not</span> <span class="n">cyclic</span><span class="p">)</span>
+
+        <span class="k">print</span> <span class="s1">&#39;Intitial score = </span><span class="si">%.2f</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">score</span>
         <span class="k">print</span> <span class="s1">&#39;Fitting NMF model with </span><span class="si">%d</span><span class="s1"> iterations....&#39;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_iter</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">nb_cache1</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
             <span class="n">current_cache_ind</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">hstack</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_ind</span><span class="p">[</span>
@@ -279,7 +322,7 @@
         <span class="c1"># main loop</span>
         <span class="k">for</span> <span class="n">it</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_iter</span><span class="p">):</span>
             <span class="n">tick</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">prepare_cache1</span><span class="p">(</span><span class="o">~</span><span class="n">cyclic</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">prepare_cache1</span><span class="p">(</span><span class="ow">not</span> <span class="n">cyclic</span><span class="p">)</span>
             <span class="n">score</span> <span class="o">=</span> <span class="mi">0</span>
             <span class="k">for</span> <span class="n">cache_ind</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nb_cache1</span><span class="p">):</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">nb_cache1</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
@@ -324,6 +367,8 @@
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">nb_cache1</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">factors_</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">current_cache_ind</span><span class="p">,</span> <span class="p">]</span> <span class="o">=</span>\
                         <span class="bp">self</span><span class="o">.</span><span class="n">h_cache1</span><span class="o">.</span><span class="n">get_value</span><span class="p">()</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">factors_</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">h_cache1</span><span class="o">.</span><span class="n">get_value</span><span class="p">()</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">solver</span> <span class="ow">is</span> <span class="s1">&#39;mu_batch&#39;</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">update_mu_batch_w</span><span class="p">(</span><span class="n">update_func</span><span class="p">)</span>
             <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">solver</span> <span class="ow">is</span> <span class="s1">&#39;gsag_mu&#39;</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">solver</span> <span class="ow">is</span> <span class="s1">&#39;gsg_mu&#39;</span><span class="p">:</span>
@@ -340,13 +385,30 @@
                             <span class="bp">self</span><span class="o">.</span><span class="n">cache1_ind</span><span class="p">[</span>
                                 <span class="n">cache_ind</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache1_ind</span><span class="p">[</span><span class="n">cache_ind</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">]]),</span>
                         <span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">theano</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">floatX</span><span class="p">))</span>
-                    <span class="n">score</span> <span class="o">+=</span> <span class="n">div_func</span><span class="p">[</span><span class="s1">&#39;div_cache1&#39;</span><span class="p">]()</span>
+                    <span class="k">if</span> <span class="p">(</span><span class="n">it</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                        <span class="n">score</span> <span class="o">+=</span> <span class="n">div_func</span><span class="p">[</span><span class="s1">&#39;div_cache1&#39;</span><span class="p">]()</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="n">score</span> <span class="o">=</span> <span class="n">div_func</span><span class="p">[</span><span class="s1">&#39;div_cache1&#39;</span><span class="p">]()</span>
-
-            <span class="k">print</span> <span class="s1">&#39;Intitial score (cache1) = </span><span class="si">%.1f</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">score</span>
-            <span class="n">scores</span><span class="p">[</span><span class="n">it</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">score</span><span class="p">,</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">tick</span> <span class="o">+</span> <span class="n">scores</span><span class="p">[</span><span class="n">it</span><span class="p">,</span> <span class="mi">1</span><span class="p">]]</span>
-            <span class="n">tick</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">factors_</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">h_cache1</span><span class="o">.</span><span class="n">get_value</span><span class="p">()</span>
+                <span class="k">if</span> <span class="p">(</span><span class="n">it</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">score</span> <span class="o">=</span> <span class="n">div_func</span><span class="p">[</span><span class="s1">&#39;div_cache1&#39;</span><span class="p">]()</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">it</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">score_ind</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="n">scores</span><span class="p">[</span><span class="n">score_ind</span><span class="p">,</span> <span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
+                    <span class="n">score</span><span class="p">,</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">tick</span> <span class="o">+</span> <span class="n">scores</span><span class="p">[</span><span class="n">score_ind</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]]</span>
+                <span class="k">print</span> <span class="p">(</span><span class="s1">&#39;Iteration </span><span class="si">%d</span><span class="s1"> / </span><span class="si">%d</span><span class="s1">, duration=</span><span class="si">%.1f</span><span class="s1">ms, cost=</span><span class="si">%f</span><span class="s1">&#39;</span>
+                       <span class="o">%</span> <span class="p">(</span><span class="n">it</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span>
+                          <span class="bp">self</span><span class="o">.</span><span class="n">n_iter</span><span class="p">,</span>
+                          <span class="n">scores</span><span class="p">[</span><span class="n">score_ind</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="mi">1000</span><span class="p">,</span>
+                          <span class="n">scores</span><span class="p">[</span><span class="n">score_ind</span><span class="p">,</span> <span class="mi">0</span><span class="p">]))</span>
+                <span class="n">tick</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+        <span class="n">score_ind</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="n">scores</span><span class="p">[</span><span class="n">score_ind</span><span class="p">,</span> <span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">score</span><span class="p">,</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">tick</span> <span class="o">+</span> <span class="n">scores</span><span class="p">[</span><span class="n">score_ind</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]]</span>
+        <span class="k">print</span> <span class="p">(</span><span class="s1">&#39;Iteration </span><span class="si">%d</span><span class="s1"> / </span><span class="si">%d</span><span class="s1">, duration=</span><span class="si">%.1f</span><span class="s1">ms, cost=</span><span class="si">%f</span><span class="s1">&#39;</span>
+               <span class="o">%</span> <span class="p">(</span><span class="n">it</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span>
+                  <span class="bp">self</span><span class="o">.</span><span class="n">n_iter</span><span class="p">,</span>
+                  <span class="n">scores</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="mi">1000</span><span class="p">,</span>
+                  <span class="n">scores</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]))</span>        
         <span class="k">return</span> <span class="n">scores</span></div>
 
 <div class="viewcode-block" id="BetaNMF.get_div_function"><a class="viewcode-back" href="../doc.html#beta_nmf_minibatch.BetaNMF.get_div_function">[docs]</a>    <span class="k">def</span> <span class="nf">get_div_function</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -492,53 +554,6 @@
             <span class="n">train_h</span><span class="o">=</span><span class="n">train_h</span><span class="p">,</span>
             <span class="n">train_w</span><span class="o">=</span><span class="n">train_w</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="BetaNMF.set_params"><a class="viewcode-back" href="../doc.html#beta_nmf_minibatch.BetaNMF.set_params">[docs]</a>    <span class="k">def</span> <span class="nf">set_params</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">W</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">H</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Re-set theano based parameters according to the object attributes.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        W : array (optionnal)</span>
-<span class="sd">            Value for factor W when custom initialisation is used</span>
-
-<span class="sd">        H : array (optionnal)</span>
-<span class="sd">            Value for factor H when custom initialisation is used</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">nb_batch</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">true_divide</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
-                                                   <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)))</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">batch_ind</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">nb_batch</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">))</span>
-
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache1_size</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache1_size</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache1_size</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;cache1_size should be at &#39;</span>
-                                 <span class="s1">&#39;least equal to batch_size&#39;</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">cache1_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache1_size</span><span class="o">/</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">nb_cache1</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">true_divide</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
-                                                        <span class="bp">self</span><span class="o">.</span><span class="n">cache1_size</span><span class="p">)))</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">cache1_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">nb_cache1</span> <span class="o">=</span> <span class="mi">1</span>
-        <span class="k">print</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache1_size</span>
-        <span class="k">print</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">forget_factor</span> <span class="o">=</span> <span class="mf">1.</span><span class="o">/</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sag_memory</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
-        <span class="n">fact_</span> <span class="o">=</span> <span class="p">[</span><span class="n">base</span><span class="o">.</span><span class="n">nnrandn</span><span class="p">((</span><span class="n">dim</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_components</span><span class="p">))</span>
-                 <span class="k">for</span> <span class="n">dim</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_shape</span><span class="p">]</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">init</span> <span class="o">==</span> <span class="s1">&#39;custom&#39;</span><span class="p">:</span>
-            <span class="n">fact_</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">H</span>
-            <span class="n">fact_</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">W</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">w</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">fact_</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">theano</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">floatX</span><span class="p">),</span>
-                               <span class="n">name</span><span class="o">=</span><span class="s2">&quot;W&quot;</span><span class="p">,</span> <span class="n">borrow</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span> <span class="n">allow_downcast</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">h_cache1</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">fact_</span><span class="p">[</span><span class="mi">0</span><span class="p">][:</span><span class="bp">self</span><span class="o">.</span><span class="n">cache1_size</span><span class="p">,</span>
-                                               <span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">theano</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">floatX</span><span class="p">),</span>
-                                      <span class="n">name</span><span class="o">=</span><span class="s2">&quot;H cache1&quot;</span><span class="p">,</span> <span class="n">borrow</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span>
-                                      <span class="n">allow_downcast</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">factors_</span> <span class="o">=</span> <span class="n">fact_</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">x_cache1</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">cache1_size</span><span class="p">,</span>
-                                                <span class="bp">self</span><span class="o">.</span><span class="n">data_shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span>
-            <span class="n">theano</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">floatX</span><span class="p">),</span>
-            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;X cache1&quot;</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">init</span><span class="p">()</span></div>
-
 <div class="viewcode-block" id="BetaNMF.init"><a class="viewcode-back" href="../doc.html#beta_nmf_minibatch.BetaNMF.init">[docs]</a>    <span class="k">def</span> <span class="nf">init</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Initialise theano variable to store the gradients&quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">grad_w</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span>
@@ -590,6 +605,87 @@
                                                 <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)))</span>
                                            <span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span></div>
 
+<div class="viewcode-block" id="BetaNMF.set_factors"><a class="viewcode-back" href="../doc.html#beta_nmf_minibatch.BetaNMF.set_factors">[docs]</a>    <span class="k">def</span> <span class="nf">set_factors</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">W</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">H</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">fixed_factors</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Re-set theano based parameters according to the object attributes.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        W : array (optionnal)</span>
+<span class="sd">            Value for factor W when custom initialisation is used</span>
+
+<span class="sd">        H : array (optionnal)</span>
+<span class="sd">            Value for factor H when custom initialisation is used</span>
+
+<span class="sd">        fixed_factors : array  (default Null)</span>
+<span class="sd">            list of factors that are not updated</span>
+<span class="sd">                e.g. fixed_factors = [0] -&gt; H is not updated</span>
+
+<span class="sd">                fixed_factors = [1] -&gt; W is not updated</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">data_shape</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nb_batch</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">true_divide</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                                                   <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">batch_ind</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">nb_batch</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">))</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache1_size</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache1_size</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache1_size</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;cache1_size should be at &#39;</span>
+                                 <span class="s1">&#39;least equal to batch_size&#39;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cache1_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache1_size</span><span class="o">/</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">nb_cache1</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">true_divide</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                                                        <span class="bp">self</span><span class="o">.</span><span class="n">cache1_size</span><span class="p">)))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cache1_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">nb_cache1</span> <span class="o">=</span> <span class="mi">1</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">forget_factor</span> <span class="o">=</span> <span class="mf">1.</span><span class="o">/</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sag_memory</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">fact_</span> <span class="o">=</span> <span class="p">[</span><span class="n">base</span><span class="o">.</span><span class="n">nnrandn</span><span class="p">((</span><span class="n">dim</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_components</span><span class="p">))</span>
+                 <span class="k">for</span> <span class="n">dim</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_shape</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">H</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">fact_</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">H</span>
+        <span class="k">if</span> <span class="n">W</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">fact_</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">W</span>
+        <span class="k">if</span> <span class="n">fixed_factors</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">fixed_factors</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="mi">1</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">fixed_factors</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">w</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">fact_</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">theano</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">floatX</span><span class="p">),</span>
+                                   <span class="n">name</span><span class="o">=</span><span class="s2">&quot;W&quot;</span><span class="p">,</span> <span class="n">borrow</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span> <span class="n">allow_downcast</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+        <span class="k">if</span> <span class="mi">0</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">fixed_factors</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">h_cache1</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span>
+                <span class="n">fact_</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span>
+                    <span class="p">:</span><span class="bp">self</span><span class="o">.</span><span class="n">cache1_size</span><span class="p">,</span> <span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">theano</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">floatX</span><span class="p">),</span>
+                <span class="n">name</span><span class="o">=</span><span class="s2">&quot;H cache1&quot;</span><span class="p">,</span> <span class="n">borrow</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span>
+                <span class="n">allow_downcast</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">factors_</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">fact_</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">factors_</span> <span class="o">=</span> <span class="n">fact_</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">x_cache1</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">cache1_size</span><span class="p">,</span>
+                                                <span class="bp">self</span><span class="o">.</span><span class="n">data_shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span>
+            <span class="n">theano</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">floatX</span><span class="p">),</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;X cache1&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">init</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="BetaNMF.transform"><a class="viewcode-back" href="../doc.html#beta_nmf_minibatch.BetaNMF.transform">[docs]</a>    <span class="k">def</span> <span class="nf">transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">warm_start</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Project data X on the basis W</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        X : array</span>
+<span class="sd">            The input data</span>
+<span class="sd">        warm_start : Boolean (default False)</span>
+<span class="sd">            start from previous values</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        H : array</span>
+<span class="sd">            Activations</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fixed_factors</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">warm_start</span><span class="p">:</span>
+            <span class="k">print</span> <span class="s2">&quot;cold start&quot;</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">set_factors</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">fixed_factors</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">fixed_factors</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">warm_start</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">factors_</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span></div>
+
 <div class="viewcode-block" id="BetaNMF.update_mu_sag"><a class="viewcode-back" href="../doc.html#beta_nmf_minibatch.BetaNMF.update_mu_sag">[docs]</a>    <span class="k">def</span> <span class="nf">update_mu_sag</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch_ind</span><span class="p">,</span> <span class="n">update_func</span><span class="p">,</span> <span class="n">grad_func</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Update current batch with SAG based algorithms</span>
 
@@ -605,10 +701,12 @@
 <span class="sd">        grad_func : Theano compiled function</span>
 <span class="sd">            Gradient function</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">grad_func</span><span class="p">[</span><span class="s1">&#39;grad_h&#39;</span><span class="p">](</span><span class="n">batch_ind</span><span class="p">)</span>
-        <span class="n">update_func</span><span class="p">[</span><span class="s1">&#39;train_h&#39;</span><span class="p">](</span><span class="n">batch_ind</span><span class="p">)</span>
-        <span class="n">grad_func</span><span class="p">[</span><span class="s1">&#39;grad_w&#39;</span><span class="p">](</span><span class="n">batch_ind</span><span class="p">)</span>
-        <span class="n">update_func</span><span class="p">[</span><span class="s1">&#39;train_w&#39;</span><span class="p">]()</span></div>
+        <span class="k">if</span> <span class="mi">1</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">fixed_factors</span><span class="p">:</span>
+            <span class="n">grad_func</span><span class="p">[</span><span class="s1">&#39;grad_h&#39;</span><span class="p">](</span><span class="n">batch_ind</span><span class="p">)</span>
+            <span class="n">update_func</span><span class="p">[</span><span class="s1">&#39;train_h&#39;</span><span class="p">](</span><span class="n">batch_ind</span><span class="p">)</span>
+        <span class="k">if</span> <span class="mi">0</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">fixed_factors</span><span class="p">:</span>
+            <span class="n">grad_func</span><span class="p">[</span><span class="s1">&#39;grad_w&#39;</span><span class="p">](</span><span class="n">batch_ind</span><span class="p">)</span>
+            <span class="n">update_func</span><span class="p">[</span><span class="s1">&#39;train_w&#39;</span><span class="p">]()</span></div>
 
 <div class="viewcode-block" id="BetaNMF.update_mu_batch_h"><a class="viewcode-back" href="../doc.html#beta_nmf_minibatch.BetaNMF.update_mu_batch_h">[docs]</a>    <span class="k">def</span> <span class="nf">update_mu_batch_h</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch_ind</span><span class="p">,</span> <span class="n">update_func</span><span class="p">,</span> <span class="n">grad_func</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Update h for current batch with standard MU</span>
@@ -625,9 +723,10 @@
 <span class="sd">        grad_func : Theano compiled function</span>
 <span class="sd">            Gradient function</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">grad_func</span><span class="p">[</span><span class="s1">&#39;grad_h&#39;</span><span class="p">](</span><span class="n">batch_ind</span><span class="p">)</span>
-        <span class="n">update_func</span><span class="p">[</span><span class="s1">&#39;train_h&#39;</span><span class="p">](</span><span class="n">batch_ind</span><span class="p">)</span>
-        <span class="n">grad_func</span><span class="p">[</span><span class="s1">&#39;grad_w&#39;</span><span class="p">](</span><span class="n">batch_ind</span><span class="p">)</span></div>
+        <span class="k">if</span> <span class="mi">0</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">fixed_factors</span><span class="p">:</span>
+            <span class="n">grad_func</span><span class="p">[</span><span class="s1">&#39;grad_h&#39;</span><span class="p">](</span><span class="n">batch_ind</span><span class="p">)</span>
+            <span class="n">update_func</span><span class="p">[</span><span class="s1">&#39;train_h&#39;</span><span class="p">](</span><span class="n">batch_ind</span><span class="p">)</span>
+            <span class="n">grad_func</span><span class="p">[</span><span class="s1">&#39;grad_w&#39;</span><span class="p">](</span><span class="n">batch_ind</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="BetaNMF.update_mu_batch_w"><a class="viewcode-back" href="../doc.html#beta_nmf_minibatch.BetaNMF.update_mu_batch_w">[docs]</a>    <span class="k">def</span> <span class="nf">update_mu_batch_w</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">udpate_func</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Update W with standard MU</span>
@@ -637,10 +736,14 @@
 <span class="sd">        update_func : Theano compiled function</span>
 <span class="sd">            Update function</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">udpate_func</span><span class="p">[</span><span class="s1">&#39;train_w&#39;</span><span class="p">]()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">grad_w</span><span class="o">.</span><span class="n">set_value</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">2</span><span class="p">,</span>
-                              <span class="bp">self</span><span class="o">.</span><span class="n">data_shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
-                              <span class="bp">self</span><span class="o">.</span><span class="n">n_components</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">theano</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">floatX</span><span class="p">))</span></div></div>
+        <span class="k">if</span> <span class="mi">1</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">fixed_factors</span><span class="p">:</span>
+            <span class="n">udpate_func</span><span class="p">[</span><span class="s1">&#39;train_w&#39;</span><span class="p">]()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">grad_w</span><span class="o">.</span><span class="n">set_value</span><span class="p">(</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span>
+                    <span class="mi">2</span><span class="p">,</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">data_shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">n_components</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span>
+                        <span class="n">theano</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">floatX</span><span class="p">))</span></div></div>
 </pre></div>
 
           </div>

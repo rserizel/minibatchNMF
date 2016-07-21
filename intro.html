@@ -36,6 +36,9 @@
           <a href="genindex.html" title="General Index"
              accesskey="I">index</a></li>
         <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
           <a href="doc.html" title="Documentation"
              accesskey="N">next</a> |</li>
         <li class="right" >
@@ -94,8 +97,7 @@ x\log\frac{x}{y} - x + y&amp;\beta=1\nonumber\\
 </div>
 <div class="section" id="stochastic-mini-batch-updates">
 <h2>Stochastic mini-batch updates<a class="headerlink" href="#stochastic-mini-batch-updates" title="Permalink to this headline">¶</a></h2>
-<p>label{stoMB}
-When aiming at minimizing an Euclidean distance, it has been shown than drawing samples randomly can improve greatly the convergence speed in dictionary learning and by extension in NMF <a class="footnote-reference" href="#id31" id="id15">[11]</a> <a class="footnote-reference" href="#id32" id="id16">[12]</a>. We propose to apply a similar idea to MU in order to take advantage of the wide variety of divergences covered by the <span class="math">\(\beta\)</span>-divergence. Instead of selecting the mini-batch sequentially on the original data <span class="math">\(\textbf{V}\)</span> as above, we propose to draw mini-batches randomly on a shuffled version of <span class="math">\(\textbf{V}\)</span>. The mini-batch update of <span class="math">\(\textbf{H}\)</span> still need one full pass through the data but a single mini-batch can be used to update <span class="math">\(\textbf{W}\)</span>, in an way analogous to stochastic gradient (SG) methods <a class="footnote-reference" href="#id33" id="id17">[13]</a>.</p>
+<p>When aiming at minimizing an Euclidean distance, it has been shown than drawing samples randomly can improve greatly the convergence speed in dictionary learning and by extension in NMF <a class="footnote-reference" href="#id31" id="id15">[11]</a> <a class="footnote-reference" href="#id32" id="id16">[12]</a>. We propose to apply a similar idea to MU in order to take advantage of the wide variety of divergences covered by the <span class="math">\(\beta\)</span>-divergence. Instead of selecting the mini-batch sequentially on the original data <span class="math">\(\textbf{V}\)</span> as above, we propose to draw mini-batches randomly on a shuffled version of <span class="math">\(\textbf{V}\)</span>. The mini-batch update of <span class="math">\(\textbf{H}\)</span> still need one full pass through the data but a single mini-batch can be used to update <span class="math">\(\textbf{W}\)</span>, in an way analogous to stochastic gradient (SG) methods <a class="footnote-reference" href="#id33" id="id17">[13]</a>.</p>
 <p>Two different strategies can be considered to updates <span class="math">\(\textbf{W}\)</span>. The first option is to updates <span class="math">\(\textbf{W}\)</span> for each mini-batch, this approach is denoted asymmetric SG mini-batch MU (ASG-MU) as <span class="math">\(\textbf{H}\)</span> and <span class="math">\(\textbf{W}\)</span> are updated asymmetrically (the full <span class="math">\(\textbf{H}\)</span> is updated once per epoch while <span class="math">\(\textbf{W}\)</span> is updated for each mini-batch). The second option is to update <span class="math">\(\textbf{W}\)</span> only once per epoch on a randomly selected mini-batch a described this approach will be referred to as greedy SG mini-batch MU (GSG-MU). Detailled description of the algorithm can be found in <a class="footnote-reference" href="#id21" id="id18">[1]</a></p>
 </div>
 <div class="section" id="stochastic-average-gradient-mini-batch-updates">
@@ -322,6 +324,9 @@ When aiming at minimizing an Euclidean distance, it has been shown than drawing 
         <li class="right" style="margin-right: 10px">
           <a href="genindex.html" title="General Index"
              >index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
         <li class="right" >
           <a href="doc.html" title="Documentation"
              >next</a> |</li>

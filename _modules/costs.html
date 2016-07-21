@@ -78,6 +78,7 @@
 <span class="sd">    -------</span>
 <span class="sd">    div : Theano scalar</span>
 <span class="sd">        beta divergence D(X|WH)&quot;&quot;&quot;</span>
+
     <span class="n">div</span> <span class="o">=</span> <span class="n">ifelse</span><span class="p">(</span>
       <span class="n">T</span><span class="o">.</span><span class="n">eq</span><span class="p">(</span><span class="n">beta</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span>
       <span class="n">T</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="mf">1.</span> <span class="o">/</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">T</span><span class="o">.</span><span class="n">power</span><span class="p">(</span><span class="n">X</span> <span class="o">-</span> <span class="n">T</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">H</span><span class="p">,</span> <span class="n">W</span><span class="p">),</span> <span class="mi">2</span><span class="p">)),</span>

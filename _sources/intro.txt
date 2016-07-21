@@ -64,7 +64,6 @@ For each batch :math:`b`, the update of the activations :math:`\textbf{H}_b` cor
 
 Stochastic mini-batch updates
 +++++++++++++++++++++++++++++
-\label{stoMB}
 When aiming at minimizing an Euclidean distance, it has been shown than drawing samples randomly can improve greatly the convergence speed in dictionary learning and by extension in NMF [11]_ [12]_. We propose to apply a similar idea to MU in order to take advantage of the wide variety of divergences covered by the :math:`\beta`-divergence. Instead of selecting the mini-batch sequentially on the original data :math:`\textbf{V}` as above, we propose to draw mini-batches randomly on a shuffled version of :math:`\textbf{V}`. The mini-batch update of :math:`\textbf{H}` still need one full pass through the data but a single mini-batch can be used to update :math:`\textbf{W}`, in an way analogous to stochastic gradient (SG) methods [13]_. 
 
 Two different strategies can be considered to updates :math:`\textbf{W}`. The first option is to updates :math:`\textbf{W}` for each mini-batch, this approach is denoted asymmetric SG mini-batch MU (ASG-MU) as :math:`\textbf{H}` and :math:`\textbf{W}` are updated asymmetrically (the full :math:`\textbf{H}` is updated once per epoch while :math:`\textbf{W}` is updated for each mini-batch). The second option is to update :math:`\textbf{W}` only once per epoch on a randomly selected mini-batch a described this approach will be referred to as greedy SG mini-batch MU (GSG-MU). Detailled description of the algorithm can be found in [1]_

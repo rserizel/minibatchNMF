@@ -60,7 +60,7 @@ fit function and theano functions to compute updates and cost.</p>
 </div>
 <dl class="class">
 <dt id="beta_nmf_minibatch.BetaNMF">
-<em class="property">class </em><code class="descclassname">beta_nmf_minibatch.</code><code class="descname">BetaNMF</code><span class="sig-paren">(</span><em>data_shape</em>, <em>n_components=50</em>, <em>beta=0</em>, <em>n_iter=50</em>, <em>fixed_factors=None</em>, <em>cache1_size=0</em>, <em>batch_size=100</em>, <em>verbose=0</em>, <em>init='random'</em>, <em>W=None</em>, <em>H=None</em>, <em>solver='mu_batch'</em>, <em>nb_batch_w=1</em>, <em>sag_memory=0</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/beta_nmf_minibatch.html#BetaNMF"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#beta_nmf_minibatch.BetaNMF" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="descclassname">beta_nmf_minibatch.</code><code class="descname">BetaNMF</code><span class="sig-paren">(</span><em>data_shape</em>, <em>n_components=50</em>, <em>beta=2</em>, <em>n_iter=50</em>, <em>fixed_factors=None</em>, <em>cache1_size=0</em>, <em>batch_size=100</em>, <em>verbose=0</em>, <em>init_mode='random'</em>, <em>W=None</em>, <em>H=None</em>, <em>solver='mu_batch'</em>, <em>nb_batch_w=1</em>, <em>sag_memory=0</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/beta_nmf_minibatch.html#BetaNMF"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#beta_nmf_minibatch.BetaNMF" title="Permalink to this definition">¶</a></dt>
 <dd><p>BetaNMF class</p>
 <p>Performs nonnegative matrix factorization with mini-batch multiplicative
 updates. GPGPU implementation based on Theano.</p>
@@ -76,7 +76,7 @@ updates. GPGPU implementation based on Theano.</p>
 <blockquote>
 <div><p>The number of latent components for the NMF model</p>
 </div></blockquote>
-<p><strong>beta: arbitrary float.</strong></p>
+<p><strong>beta: arbitrary float (default 2).</strong></p>
 <blockquote>
 <div><dl class="docutils">
 <dt>The beta-divergence to consider. Particular cases of interest are</dt>
@@ -115,7 +115,7 @@ to store partial gradients (see Schmidt et al.)</p>
 <div><p>The numer of iterations to wait between two computation and printing
 of the cost</p>
 </div></blockquote>
-<p><strong>init</strong> : string (default &#8216;random&#8217;)</p>
+<p><strong>init_mode</strong> : string (default &#8216;random&#8217;)</p>
 <blockquote>
 <div><ul class="simple">
 <li>random : initalise the factors randomly</li>
@@ -215,35 +215,41 @@ Minimizing finite sums with the stochastic average gradient
 <col width="90%" />
 </colgroup>
 <tbody valign="top">
-<tr class="row-odd"><td><a class="reference internal" href="#beta_nmf_minibatch.BetaNMF.fit" title="beta_nmf_minibatch.BetaNMF.fit"><code class="xref py py-obj docutils literal"><span class="pre">fit</span></code></a>(data[,&nbsp;full_sag,&nbsp;cyclic])</td>
+<tr class="row-odd"><td><a class="reference internal" href="#beta_nmf_minibatch.BetaNMF.check_shape" title="beta_nmf_minibatch.BetaNMF.check_shape"><code class="xref py py-obj docutils literal"><span class="pre">check_shape</span></code></a>()</td>
+<td>Check that all the matrix have consistent shapes</td>
+</tr>
+<tr class="row-even"><td><a class="reference internal" href="#beta_nmf_minibatch.BetaNMF.fit" title="beta_nmf_minibatch.BetaNMF.fit"><code class="xref py py-obj docutils literal"><span class="pre">fit</span></code></a>(data[,&nbsp;cyclic,&nbsp;warm_start])</td>
 <td>Learns NMF model</td>
 </tr>
-<tr class="row-even"><td><a class="reference internal" href="#beta_nmf_minibatch.BetaNMF.get_div_function" title="beta_nmf_minibatch.BetaNMF.get_div_function"><code class="xref py py-obj docutils literal"><span class="pre">get_div_function</span></code></a>()</td>
+<tr class="row-odd"><td><a class="reference internal" href="#beta_nmf_minibatch.BetaNMF.get_div_function" title="beta_nmf_minibatch.BetaNMF.get_div_function"><code class="xref py py-obj docutils literal"><span class="pre">get_div_function</span></code></a>()</td>
 <td>compile the theano-based divergence function</td>
 </tr>
-<tr class="row-odd"><td><a class="reference internal" href="#beta_nmf_minibatch.BetaNMF.get_gradient_mu_batch" title="beta_nmf_minibatch.BetaNMF.get_gradient_mu_batch"><code class="xref py py-obj docutils literal"><span class="pre">get_gradient_mu_batch</span></code></a>()</td>
+<tr class="row-even"><td><a class="reference internal" href="#beta_nmf_minibatch.BetaNMF.get_gradient_mu_batch" title="beta_nmf_minibatch.BetaNMF.get_gradient_mu_batch"><code class="xref py py-obj docutils literal"><span class="pre">get_gradient_mu_batch</span></code></a>()</td>
 <td>compile the theano based gradient functions for mu</td>
 </tr>
-<tr class="row-even"><td><a class="reference internal" href="#beta_nmf_minibatch.BetaNMF.get_gradient_mu_sag" title="beta_nmf_minibatch.BetaNMF.get_gradient_mu_sag"><code class="xref py py-obj docutils literal"><span class="pre">get_gradient_mu_sag</span></code></a>()</td>
+<tr class="row-odd"><td><a class="reference internal" href="#beta_nmf_minibatch.BetaNMF.get_gradient_mu_sag" title="beta_nmf_minibatch.BetaNMF.get_gradient_mu_sag"><code class="xref py py-obj docutils literal"><span class="pre">get_gradient_mu_sag</span></code></a>()</td>
 <td>compile the theano based gradient functions for mu_sag algorithms</td>
 </tr>
-<tr class="row-odd"><td><a class="reference internal" href="#beta_nmf_minibatch.BetaNMF.get_gradient_mu_sg" title="beta_nmf_minibatch.BetaNMF.get_gradient_mu_sg"><code class="xref py py-obj docutils literal"><span class="pre">get_gradient_mu_sg</span></code></a>()</td>
+<tr class="row-even"><td><a class="reference internal" href="#beta_nmf_minibatch.BetaNMF.get_gradient_mu_sg" title="beta_nmf_minibatch.BetaNMF.get_gradient_mu_sg"><code class="xref py py-obj docutils literal"><span class="pre">get_gradient_mu_sg</span></code></a>()</td>
 <td>compile the theano based gradient functions for mu_sg algorithms</td>
 </tr>
-<tr class="row-even"><td><a class="reference internal" href="#beta_nmf_minibatch.BetaNMF.get_updates" title="beta_nmf_minibatch.BetaNMF.get_updates"><code class="xref py py-obj docutils literal"><span class="pre">get_updates</span></code></a>()</td>
+<tr class="row-odd"><td><a class="reference internal" href="#beta_nmf_minibatch.BetaNMF.get_updates" title="beta_nmf_minibatch.BetaNMF.get_updates"><code class="xref py py-obj docutils literal"><span class="pre">get_updates</span></code></a>()</td>
 <td>compile the theano based update functions</td>
 </tr>
-<tr class="row-odd"><td><a class="reference internal" href="#beta_nmf_minibatch.BetaNMF.init" title="beta_nmf_minibatch.BetaNMF.init"><code class="xref py py-obj docutils literal"><span class="pre">init</span></code></a>()</td>
+<tr class="row-even"><td><a class="reference internal" href="#beta_nmf_minibatch.BetaNMF.init" title="beta_nmf_minibatch.BetaNMF.init"><code class="xref py py-obj docutils literal"><span class="pre">init</span></code></a>()</td>
 <td>Initialise theano variable to store the gradients</td>
 </tr>
-<tr class="row-even"><td><a class="reference internal" href="#beta_nmf_minibatch.BetaNMF.prepare_batch" title="beta_nmf_minibatch.BetaNMF.prepare_batch"><code class="xref py py-obj docutils literal"><span class="pre">prepare_batch</span></code></a>([randomize])</td>
+<tr class="row-odd"><td><a class="reference internal" href="#beta_nmf_minibatch.BetaNMF.prepare_batch" title="beta_nmf_minibatch.BetaNMF.prepare_batch"><code class="xref py py-obj docutils literal"><span class="pre">prepare_batch</span></code></a>([randomize])</td>
 <td>Arrange data for batches</td>
 </tr>
-<tr class="row-odd"><td><a class="reference internal" href="#beta_nmf_minibatch.BetaNMF.prepare_cache1" title="beta_nmf_minibatch.BetaNMF.prepare_cache1"><code class="xref py py-obj docutils literal"><span class="pre">prepare_cache1</span></code></a>([randomize])</td>
+<tr class="row-even"><td><a class="reference internal" href="#beta_nmf_minibatch.BetaNMF.prepare_cache1" title="beta_nmf_minibatch.BetaNMF.prepare_cache1"><code class="xref py py-obj docutils literal"><span class="pre">prepare_cache1</span></code></a>([randomize])</td>
 <td>Arrange data for to fill cache1</td>
 </tr>
-<tr class="row-even"><td><a class="reference internal" href="#beta_nmf_minibatch.BetaNMF.set_params" title="beta_nmf_minibatch.BetaNMF.set_params"><code class="xref py py-obj docutils literal"><span class="pre">set_params</span></code></a>([W,&nbsp;H])</td>
+<tr class="row-odd"><td><a class="reference internal" href="#beta_nmf_minibatch.BetaNMF.set_factors" title="beta_nmf_minibatch.BetaNMF.set_factors"><code class="xref py py-obj docutils literal"><span class="pre">set_factors</span></code></a>(data[,&nbsp;W,&nbsp;H,&nbsp;fixed_factors])</td>
 <td>Re-set theano based parameters according to the object attributes.</td>
+</tr>
+<tr class="row-even"><td><a class="reference internal" href="#beta_nmf_minibatch.BetaNMF.transform" title="beta_nmf_minibatch.BetaNMF.transform"><code class="xref py py-obj docutils literal"><span class="pre">transform</span></code></a>(data[,&nbsp;warm_start])</td>
+<td>Project data X on the basis W</td>
 </tr>
 <tr class="row-odd"><td><a class="reference internal" href="#beta_nmf_minibatch.BetaNMF.update_mu_batch_h" title="beta_nmf_minibatch.BetaNMF.update_mu_batch_h"><code class="xref py py-obj docutils literal"><span class="pre">update_mu_batch_h</span></code></a>(batch_ind,&nbsp;update_func,&nbsp;...)</td>
 <td>Update h for current batch with standard MU</td>
@@ -257,16 +263,30 @@ Minimizing finite sums with the stochastic average gradient
 </tbody>
 </table>
 <dl class="method">
+<dt id="beta_nmf_minibatch.BetaNMF.check_shape">
+<code class="descname">check_shape</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/beta_nmf_minibatch.html#BetaNMF.check_shape"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#beta_nmf_minibatch.BetaNMF.check_shape" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check that all the matrix have consistent shapes</p>
+</dd></dl>
+
+<dl class="method">
 <dt id="beta_nmf_minibatch.BetaNMF.fit">
-<code class="descname">fit</code><span class="sig-paren">(</span><em>data</em>, <em>full_sag=True</em>, <em>cyclic=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/beta_nmf_minibatch.html#BetaNMF.fit"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#beta_nmf_minibatch.BetaNMF.fit" title="Permalink to this definition">¶</a></dt>
+<code class="descname">fit</code><span class="sig-paren">(</span><em>data</em>, <em>cyclic=False</em>, <em>warm_start=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/beta_nmf_minibatch.html#BetaNMF.fit"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#beta_nmf_minibatch.BetaNMF.fit" title="Permalink to this definition">¶</a></dt>
 <dd><p>Learns NMF model</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
 <tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><p class="first"><strong>data</strong> : ndarray with nonnegative entries</p>
-<blockquote class="last">
+<blockquote>
 <div><p>The input array</p>
+</div></blockquote>
+<p><strong>cyclic</strong> : Boolean (default False)</p>
+<blockquote>
+<div><p>pick the sample cyclically</p>
+</div></blockquote>
+<p><strong>warm_start</strong> : Boolean (default False)</p>
+<blockquote class="last">
+<div><p>start from previous values</p>
 </div></blockquote>
 </td>
 </tr>
@@ -347,8 +367,8 @@ Minimizing finite sums with the stochastic average gradient
 </dd></dl>
 
 <dl class="method">
-<dt id="beta_nmf_minibatch.BetaNMF.set_params">
-<code class="descname">set_params</code><span class="sig-paren">(</span><em>W=None</em>, <em>H=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/beta_nmf_minibatch.html#BetaNMF.set_params"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#beta_nmf_minibatch.BetaNMF.set_params" title="Permalink to this definition">¶</a></dt>
+<dt id="beta_nmf_minibatch.BetaNMF.set_factors">
+<code class="descname">set_factors</code><span class="sig-paren">(</span><em>data</em>, <em>W=None</em>, <em>H=None</em>, <em>fixed_factors=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/beta_nmf_minibatch.html#BetaNMF.set_factors"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#beta_nmf_minibatch.BetaNMF.set_factors" title="Permalink to this definition">¶</a></dt>
 <dd><p>Re-set theano based parameters according to the object attributes.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -359,8 +379,45 @@ Minimizing finite sums with the stochastic average gradient
 <div><p>Value for factor W when custom initialisation is used</p>
 </div></blockquote>
 <p><strong>H</strong> : array (optionnal)</p>
-<blockquote class="last">
+<blockquote>
 <div><p>Value for factor H when custom initialisation is used</p>
+</div></blockquote>
+<p><strong>fixed_factors</strong> : array  (default Null)</p>
+<blockquote class="last">
+<div><dl class="docutils">
+<dt>list of factors that are not updated</dt>
+<dd><p class="first">e.g. fixed_factors = [0] -&gt; H is not updated</p>
+<p class="last">fixed_factors = [1] -&gt; W is not updated</p>
+</dd>
+</dl>
+</div></blockquote>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="beta_nmf_minibatch.BetaNMF.transform">
+<code class="descname">transform</code><span class="sig-paren">(</span><em>data</em>, <em>warm_start=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/beta_nmf_minibatch.html#BetaNMF.transform"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#beta_nmf_minibatch.BetaNMF.transform" title="Permalink to this definition">¶</a></dt>
+<dd><p>Project data X on the basis W</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><p class="first"><strong>X</strong> : array</p>
+<blockquote>
+<div><p>The input data</p>
+</div></blockquote>
+<p><strong>warm_start</strong> : Boolean (default False)</p>
+<blockquote>
+<div><p>start from previous values</p>
+</div></blockquote>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first"><strong>H</strong> : array</p>
+<blockquote class="last">
+<div><p>Activations</p>
 </div></blockquote>
 </td>
 </tr>
