@@ -5,14 +5,16 @@ Source code available at https://github.com/rserizel/minibatchNMF
 
 Getting Started
 ---------------
-A short example is available as at https://github.com/rserizel/beta_nmf/blob/master/minibatch_BetaNMF_howto.ipynb
+A short example is available as at https://github.com/rserizel/minibatchNMF/blob/master/minibatch_BetaNMF_howto.ipynb
+
+Citation
+--------
 
 If you are using this source code please consider citing the following paper: 
 
 .. topic:: Reference
 
 	R. Serizel, S. Essid, and G. Richard. “Mini-batch stochastic approaches for accelerated multiplicative updates in nonnegative matrix factorisation with beta-divergence”. Accepted for publication In *Proc. of MLSP*, p. 5, 2016.
-
 
 .. topic:: Bibtex
 
