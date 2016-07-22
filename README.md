@@ -5,11 +5,11 @@ Theano based GPGPU implementation of NMF with beta-diveregence and mini-batch mu
 
 ## Dependencies
 
-bbeta_nmf_minibatch need Python >= 2.7, numpy >= 10.1, Theano >= 0.8, scikit-learn >= 0.17.1, h5py >= 2.5, itertools and more_itertools
+beta_nmf_minibatch need Python >= 2.7, numpy >= 10.1, Theano >= 0.8, scikit-learn >= 0.17.1, h5py >= 2.5, itertools and more_itertools
 
 ## Documentation
 
-Dcoumentation available at http://rserizel.github.io/minibatchNMF/
+Documentation available at http://rserizel.github.io/minibatchNMF/
 
 
 ## Getting Started
