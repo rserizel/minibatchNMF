@@ -1,6 +1,6 @@
 # beta_nmf_minibatch: NMF with beta-divergence and mini-batch updates
 
-Theano based GPGPU implementation of NMF with beta-diveregence and mini-batch mult^plicative updates.
+Theano based GPGPU implementation of NMF with beta-diveregence and mini-batch multplicative updates.
 
 
 ## Dependencies
