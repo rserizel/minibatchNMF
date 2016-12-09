@@ -150,6 +150,8 @@ class BetaNMF(object):
         self.n_components = np.asarray(n_components, dtype='int32')
         self.beta = theano.shared(np.asarray(beta, theano.config.floatX),
                                   name="beta")
+        self.eps = theano.shared(np.asarray(1e-10, theano.config.floatX),
+                                  name="eps")
         self.sag_memory = sag_memory
         self.forget_factor = 1./(self.sag_memory + 1)
         self.verbose = verbose
@@ -223,7 +225,7 @@ class BetaNMF(object):
         div_func = self.get_div_function()
         if self.verbose > 0:
             scores = np.zeros((
-                np.floor(self.n_iter/self.verbose) + 2, 2))
+                int(np.floor(self.n_iter/self.verbose)) + 2, 2))
         else:
             scores = np.zeros((2, 2))
         if self.solver is 'asag_mu' or self.solver is 'gsag_mu':
@@ -487,14 +489,18 @@ class BetaNMF(object):
                                updates.mu_update(self.h_cache1[
                                     tbatch_ind[0]:tbatch_ind[1], ],
                                     self.c1_grad_h[0, ],
-                                    self.c1_grad_h[1, ]))
+                                    self.c1_grad_h[1, ],
+                                    self.eps))
         train_h = theano.function(inputs=[tbatch_ind],
                                   outputs=[],
                                   updates={(self.h_cache1, up_h)},
                                   name="trainH",
                                   allow_input_downcast=True,
                                   on_unused_input='ignore')
-        update_w = updates.mu_update(self.w, self.grad_w[0], self.grad_w[1])
+        update_w = updates.mu_update(self.w,
+                                     self.grad_w[0],
+                                     self.grad_w[1],
+                                     self.eps)
         train_w = theano.function(inputs=[],
                                   outputs=[],
                                   updates={self.w: update_w},

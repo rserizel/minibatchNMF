@@ -209,7 +209,7 @@ def mu_update_h(X, W, H, beta):
     return H, T.stack(grad_h_pos, grad_h_neg)
 
 
-def mu_update(factor, gradient_pos, gradient_neg):
+def mu_update(factor, gradient_pos, gradient_neg, eps):
     """Update the factor based on multiplicative rules
 
     Parameters
@@ -223,12 +223,15 @@ def mu_update(factor, gradient_pos, gradient_neg):
     gradient_neg: theano tensor
         Negative part of gradient relatively to factor
 
+    eps: theano tensor
+        Small factor to avoid division by 0
+
     Returns
     -------
     factor: theano matrix
         New value of factor update with multiplicative updates
     """
-    factor *= gradient_neg/gradient_pos
+    factor *= gradient_neg/(gradient_pos + eps)
     return factor
 
 
