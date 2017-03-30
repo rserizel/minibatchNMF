@@ -8,7 +8,7 @@ base.py
     to load data, annotations, to normalize matrices
     and generate nonnegative random matrices
     
-    Copyright 2004-2016 Romain Serizel
+    Copyright 2014-2016 Romain Serizel
     This software is distributed under the terms of the GNU Public License
     version 3 (http://www.gnu.org/licenses/gpl.txt)"""
 
