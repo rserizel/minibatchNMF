@@ -38,4 +38,10 @@ Bibtex
 
 ## Author
 
-Romain Serizel, 2015 -- Present
+Romain Serizel, 2014 -- Present
+
+## License
+
+Copyright 2014-2016 Romain Serizel
+
+This software is distributed under the terms of the GNU Public License version 3 (http://www.gnu.org/licenses/gpl.txt)
