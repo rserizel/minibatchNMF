@@ -6,7 +6,11 @@ base.py
 
     The base module includes the basic functions such as
     to load data, annotations, to normalize matrices
-    and generate nonnegative random matrices"""
+    and generate nonnegative random matrices
+    
+    Copyright 2004-2016 Romain Serizel
+    This software is distributed under the terms of the GNU Public License
+    version 3 (http://www.gnu.org/licenses/gpl.txt)"""
 
 from sklearn import preprocessing
 import h5py
