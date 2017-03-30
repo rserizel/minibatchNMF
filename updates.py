@@ -4,7 +4,12 @@ updates.py
 .. topic:: Contents
 
   The update module regroups the update functions used for
-  the mini-batch NMF"""
+  the mini-batch NMF
+      
+  Copyright 2014-2016 Romain Serizel
+  This software is distributed under the terms of the GNU Public License
+  version 3 (http://www.gnu.org/licenses/gpl.txt)"""
+
 import theano.tensor as T
 from theano.ifelse import ifelse
 import theano
