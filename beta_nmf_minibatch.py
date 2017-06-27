@@ -661,10 +661,10 @@ class BetaNMF(object):
         grad_func : Theano compiled function
             Gradient function
         """
-        if 1 not in self.fixed_factors:
+        if 0 not in self.fixed_factors:
             grad_func['grad_h'](batch_ind)
             update_func['train_h'](batch_ind)
-        if 0 not in self.fixed_factors:
+        if 1 not in self.fixed_factors:
             grad_func['grad_w'](batch_ind)
             update_func['train_w']()
 
